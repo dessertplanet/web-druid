@@ -151,6 +151,10 @@ class DruidApp {
         this.commandHistory = [];
         this.historyIndex = -1;
         this.currentInput = '';
+        this.isNavigatingHistory = false; // Flag to prevent history reset during navigation
+        this.commandHistory = [];
+        this.historyIndex = -1;
+        this.currentInput = '';
         
         this.initializeUI();
         this.checkBrowserSupport();
@@ -482,31 +486,18 @@ class DruidApp {
             }
             // Shift+Enter always creates a new line (default behavior, don't prevent)
             
-            // Handle Up arrow for history navigation
+            // Handle Up arrow for history navigation - always navigate regardless of cursor position
             else if (keyCode === monaco.KeyCode.UpArrow && !isSuggestVisible) {
-                const position = this.replEditor.getPosition();
-                // Navigate history if cursor is on first line and at start of content
-                if (position.lineNumber === 1 && position.column === 1) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    this.navigateReplHistory('up');
-                }
-                // Otherwise allow default cursor movement
+                e.preventDefault();
+                e.stopPropagation();
+                this.navigateReplHistory('up');
             }
             
-            // Handle Down arrow for history navigation
+            // Handle Down arrow for history navigation - always navigate regardless of cursor position
             else if (keyCode === monaco.KeyCode.DownArrow && !isSuggestVisible) {
-                const model = this.replEditor.getModel();
-                const position = this.replEditor.getPosition();
-                const lastLine = model.getLineCount();
-                const lastLineLength = model.getLineLength(lastLine);
-                // Navigate history if cursor is on last line and at end of content
-                if (position.lineNumber === lastLine && position.column === lastLineLength + 1) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    this.navigateReplHistory('down');
-                }
-                // Otherwise allow default cursor movement
+                e.preventDefault();
+                e.stopPropagation();
+                this.navigateReplHistory('down');
             }
         });
 
@@ -514,8 +505,8 @@ class DruidApp {
         this.replEditor.onDidChangeModelContent(() => {
             if (this.replAutocompleteEnabled) {
                 this.validateReplSyntax();
-                // Reset history index when user modifies content
-                if (this.historyIndex !== -1) {
+                // Reset history index when user modifies content (but not during history navigation)
+                if (this.historyIndex !== -1 && !this.isNavigatingHistory) {
                     this.historyIndex = -1;
                 }
             }
@@ -571,17 +562,21 @@ class DruidApp {
             
             if (this.historyIndex < this.commandHistory.length - 1) {
                 this.historyIndex++;
+                this.isNavigatingHistory = true;
                 this.replEditor.setValue(this.commandHistory[this.commandHistory.length - 1 - this.historyIndex]);
+                this.isNavigatingHistory = false;
             }
         } else if (direction === 'down') {
             if (this.historyIndex === -1) return;
             
             this.historyIndex--;
+            this.isNavigatingHistory = true;
             if (this.historyIndex === -1) {
                 this.replEditor.setValue(this.currentInput);
             } else {
                 this.replEditor.setValue(this.commandHistory[this.commandHistory.length - 1 - this.historyIndex]);
             }
+            this.isNavigatingHistory = false;
         }
     }
 
@@ -589,9 +584,18 @@ class DruidApp {
         // Output the sent command BEFORE sending to ensure it appears first
         this.outputLine(`>> ${code}`);
         
+        // Add to command history (avoid duplicates of the last command)
+        // This happens regardless of connection status
+        if (this.commandHistory.length === 0 || this.commandHistory[this.commandHistory.length - 1] !== code) {
+            this.commandHistory.push(code);
+        }
+        
         if (!this.crow.isConnected) {
             this.outputLine('crow is not connected');
             this.replEditor.setValue('');
+            // Reset history navigation
+            this.historyIndex = -1;
+            this.currentInput = '';
             return;
         }
         
@@ -600,11 +604,6 @@ class DruidApp {
             for (const line of lines) {
                 await this.crow.writeLine(line);
                 await this.delay(1);
-            }
-            
-            // Add to command history (avoid duplicates of the last command)
-            if (this.commandHistory.length === 0 || this.commandHistory[this.commandHistory.length - 1] !== code) {
-                this.commandHistory.push(code);
             }
             
             // Reset history navigation
@@ -1243,9 +1242,18 @@ class DruidApp {
                 // Output the sent command BEFORE sending to ensure it appears first
                 this.outputLine(`>> ${code}`);
                 
+                // Add to command history (avoid duplicates of the last command)
+                // This happens regardless of connection status
+                if (this.commandHistory.length === 0 || this.commandHistory[this.commandHistory.length - 1] !== code) {
+                    this.commandHistory.push(code);
+                }
+                
                 if (!this.crow.isConnected) {
                     this.outputLine('crow is not connected');
                     this.elements.replInput.value = '';
+                    // Reset history navigation
+                    this.historyIndex = -1;
+                    this.currentInput = '';
                     return;
                 }
                 
@@ -1254,11 +1262,6 @@ class DruidApp {
                     for (const line of lines) {
                         await this.crow.writeLine(line);
                         await this.delay(1);
-                    }
-                    
-                    // Add to command history (avoid duplicates of the last command)
-                    if (this.commandHistory.length === 0 || this.commandHistory[this.commandHistory.length - 1] !== code) {
-                        this.commandHistory.push(code);
                     }
                     
                     // Reset history navigation
