@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>web-druid</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs/editor/editor.main.min.css"
+          integrity="sha384-Es2/qE4/s88X6kMItINqx67I9Y9M0MO665Vu56yiMJYi064N8V4/PTuqdWZD7DKN"
+          crossorigin="anonymous">
+</head>
+<body>
+    <div class="app-container">
+        <header class="app-header">
+            <div class="header-left">
+                <h1>//// web-druid</h1>
+                <div class="repl-status-pill">
+                    <span id="replStatusIndicator" class="repl-status-indicator"></span>
+                    <span id="replStatusText" class="repl-status-text">not connected</span>
+                </div>
+                <button id="replConnectionBtn" class="repl-connection-btn">connect</button>
+                <button id="boweryBtn" class="repl-connection-btn">bowery</button>
+                <button id="bbboweryBtn" class="repl-connection-btn">bbbowery</button>
+            </div>
+            <div class="header-right">
+                <button id="scriptReferenceBtn" class="repl-connection-btn">script reference</button>
+                <span class="editor-toggle-label">editor</span>
+                <label class="toggle-switch">
+                    <input type="checkbox" id="toggleEditorBtn">
+                    <span class="toggle-slider"></span>
+                </label>
+            </div>
+        </header>
+
+        <div class="workspace">
+            <div class="toolbar hidden" id="toolbar">
+                <div class="toolbar-group">
+                    <span id="scriptName" class="script-name">untitled.lua</span>
+                </div>
+                <div class="toolbar-group">
+                    <button id="runBtn" class="toolbar-btn" disabled title="Run script (⌘P)">▶ run</button>
+                    <button id="uploadBtn" class="toolbar-btn" disabled title="Upload & save script">↑ upload</button>
+                </div>
+                <div class="toolbar-group">
+                    <button id="newBtn" class="toolbar-btn">new</button>
+                    <button id="openBtn" class="toolbar-btn">open</button>
+                    <button id="saveBtn" class="toolbar-btn">save</button>
+                    <button id="renameBtn" class="toolbar-btn">rename</button>
+                </div>
+            </div>
+
+            <div class="split-container" id="splitContainer">
+                <div class="editor-pane hidden" id="editorPane">
+                    <div id="editor"></div>
+                </div>
+                <div class="split-handle hidden" id="splitHandle">
+                    <div class="split-handle-bar"></div>
+                </div>
+                <div class="repl-pane full-width" id="replPane">
+                    <div class="repl-content">
+                        <div id="output" class="repl-output"></div>
+                        <div class="repl-actions">
+                            <button id="helpBtn" class="repl-action-btn">help</button>
+                            <button id="clearBtn" class="repl-action-btn">clear</button>
+                            <div class="repl-actions-spacer"></div>
+                            <span class="repl-autocomplete-label">auto-complete</span>
+                            <label class="toggle-switch repl-toggle">
+                                <input type="checkbox" id="toggleReplAutocomplete" checked>
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                        <div class="repl-input-container">
+                            <div id="replEditorContainer" class="repl-editor-container" style="display: none;"></div>
+                            <textarea id="replInput" class="repl-input" placeholder="send word to the bird"></textarea>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <input type="file" id="fileInput" accept=".lua" style="display: none;">
+    </div>
+
+    <div id="browserWarning" class="modal" style="display: none;">
+        <div class="modal-content">
+            <h2>Browser Not Supported</h2>
+            <p>This application requires the Web Serial API, which is only available in Chromium-based browsers.</p>
+            <p>Please use Chrome, Edge, or Opera.</p>
+            <button id="closeWarning" class="modal-btn">Close</button>
+        </div>
+    </div>
+
+    <div id="boweryModal" class="modal" style="display: none;">
+        <div class="modal-content bowery-modal">
+            <div class="modal-header">
+                <h2>Browse bowery scripts</h2>
+                <button id="closeBowery" class="modal-close">&times;</button>
+            </div>
+            <div class="modal-info">
+                <div id="boweryAction" class="info-line"></div>
+                <div class="info-line">Scripts fetched from <a href="https://github.com/monome/bowery" target="_blank">github.com/monome/bowery</a></div>
+            </div>
+            <div class="modal-search">
+                <input type="text" id="bowerySearch" placeholder="Search scripts..." class="search-input">
+            </div>
+            <div id="boweryLoading" class="modal-loading">Loading scripts...</div>
+            <div id="boweryError" class="modal-error" style="display: none;"></div>
+            <div id="boweryList" class="bowery-list" style="display: none;"></div>
+        </div>
+    </div>
+
+    <div id="bbboweryModal" class="modal" style="display: none;">
+        <div class="modal-content bowery-modal">
+            <div class="modal-header">
+                <h2>Browse bbbowery scripts</h2>
+                <button id="closeBbbowery" class="modal-close">&times;</button>
+            </div>
+            <div class="modal-info" style="text-align: center; padding: 3rem;">
+                <div class="info-line" style="font-size: 1.2rem;">Coming soon...</div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs/loader.min.js"
+            integrity="sha384-UcP5/iVWyRzIhnVjcB2o9W1eoYKL5fAhHTRzvFZg8ctOsoAoDeBQyQuyIk+BJ/nh"
+            crossorigin="anonymous"></script>
+    <script>
+        // Temporarily disable AMD to prevent luaparse from registering as a module
+        var define_backup = window.define;
+        window.define = undefined;
+    </script>
+    <script src="https://fstirlitz.github.io/luaparse/luaparse.js"
+            integrity="sha384-nZWrVLuK/PbNpO/y2j3aWnW6br7zI0jAOiOm5tIL7W8OV58RYFu2C2VMumLaAhB0"
+            crossorigin="anonymous"></script>
+    <script>
+        // Restore AMD after luaparse has loaded
+        window.define = define_backup;
+    </script>
+    <script src="druid.js"></script>
+</body>
+</html>
