@@ -5,9 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>web-druid</title>
     <link rel="stylesheet" href="style.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs/editor/editor.main.min.css"
-          integrity="sha384-Es2/qE4/s88X6kMItINqx67I9Y9M0MO665Vu56yiMJYi064N8V4/PTuqdWZD7DKN"
-          crossorigin="anonymous">
+    <link rel="stylesheet" href="node_modules/monaco-editor/min/vs/editor/editor.main.css">
 </head>
 <body>
     <div class="app-container">
@@ -121,17 +119,13 @@
         </div>
     </div>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs/loader.min.js"
-            integrity="sha384-UcP5/iVWyRzIhnVjcB2o9W1eoYKL5fAhHTRzvFZg8ctOsoAoDeBQyQuyIk+BJ/nh"
-            crossorigin="anonymous"></script>
+    <script src="node_modules/monaco-editor/min/vs/loader.js"></script>
     <script>
         // Temporarily disable AMD to prevent luaparse from registering as a module
         var define_backup = window.define;
         window.define = undefined;
     </script>
-    <script src="https://fstirlitz.github.io/luaparse/luaparse.js"
-            integrity="sha384-nZWrVLuK/PbNpO/y2j3aWnW6br7zI0jAOiOm5tIL7W8OV58RYFu2C2VMumLaAhB0"
-            crossorigin="anonymous"></script>
+    <script src="node_modules/luaparse/luaparse.js"></script>
     <script>
         // Restore AMD after luaparse has loaded
         window.define = define_backup;

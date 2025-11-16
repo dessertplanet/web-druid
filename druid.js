@@ -295,7 +295,7 @@ class DruidApp {
     }
 
     initializeEditor() {
-        require.config({ paths: { vs: 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs' } });
+        require.config({ paths: { vs: 'node_modules/monaco-editor/min/vs' } });
         
         require(['vs/editor/editor.main'], () => {
             // Configure Lua language settings
