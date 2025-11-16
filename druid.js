@@ -461,58 +461,54 @@ class DruidApp {
         updatePlaceholder();
         this.replEditor.onDidChangeModelContent(updatePlaceholder);
 
-        // Handle Enter key - send command ONLY when suggestion widget is not visible
-        this.replEditor.addCommand(monaco.KeyCode.Enter, () => {
-            if (!this.replAutocompleteEnabled) return;
-            
-            const code = this.replEditor.getValue().trim();
-            if (code) {
-                this.sendReplCommand(code);
+        // Handle keyboard events with explicit focus checking
+        this.replEditor.onKeyDown((e) => {
+            // Only process if autocomplete is enabled and this editor has focus
+            if (!this.replAutocompleteEnabled || !this.replEditor.hasTextFocus()) {
+                return;
             }
-        }, '!suggestWidgetVisible');
 
-        // Handle Shift+Enter for new line always
-        this.replEditor.addCommand(monaco.KeyMod.Shift | monaco.KeyCode.Enter, () => {
-            if (!this.replAutocompleteEnabled) return;
+            const keyCode = e.keyCode;
+            const isSuggestVisible = e.browserEvent.target.closest('.suggest-widget');
             
-            const position = this.replEditor.getPosition();
-            this.replEditor.executeEdits('', [{
-                range: new monaco.Range(position.lineNumber, position.column, position.lineNumber, position.column),
-                text: '\n'
-            }]);
+            // Handle Enter key - send command ONLY when suggestion widget is not visible
+            if (keyCode === monaco.KeyCode.Enter && !e.shiftKey && !isSuggestVisible) {
+                const code = this.replEditor.getValue().trim();
+                if (code) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    this.sendReplCommand(code);
+                }
+            }
+            // Shift+Enter always creates a new line (default behavior, don't prevent)
+            
+            // Handle Up arrow for history navigation
+            else if (keyCode === monaco.KeyCode.UpArrow && !isSuggestVisible) {
+                const position = this.replEditor.getPosition();
+                // Navigate history if cursor is on first line and at start of content
+                if (position.lineNumber === 1 && position.column === 1) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    this.navigateReplHistory('up');
+                }
+                // Otherwise allow default cursor movement
+            }
+            
+            // Handle Down arrow for history navigation
+            else if (keyCode === monaco.KeyCode.DownArrow && !isSuggestVisible) {
+                const model = this.replEditor.getModel();
+                const position = this.replEditor.getPosition();
+                const lastLine = model.getLineCount();
+                const lastLineLength = model.getLineLength(lastLine);
+                // Navigate history if cursor is on last line and at end of content
+                if (position.lineNumber === lastLine && position.column === lastLineLength + 1) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    this.navigateReplHistory('down');
+                }
+                // Otherwise allow default cursor movement
+            }
         });
-
-        // Handle Up arrow for history - only when NOT in suggestion widget
-        this.replEditor.addCommand(monaco.KeyCode.UpArrow, () => {
-            if (!this.replAutocompleteEnabled) return;
-            
-            const position = this.replEditor.getPosition();
-            const model = this.replEditor.getModel();
-            // Navigate history if cursor is on first line and at start of content
-            if (position.lineNumber === 1 && position.column === 1) {
-                this.navigateReplHistory('up');
-            } else {
-                // Default behavior - move cursor up
-                this.replEditor.trigger('keyboard', 'cursorUp', {});
-            }
-        }, '!suggestWidgetVisible');
-
-        // Handle Down arrow for history - only when NOT in suggestion widget  
-        this.replEditor.addCommand(monaco.KeyCode.DownArrow, () => {
-            if (!this.replAutocompleteEnabled) return;
-            
-            const model = this.replEditor.getModel();
-            const position = this.replEditor.getPosition();
-            const lastLine = model.getLineCount();
-            const lastLineLength = model.getLineLength(lastLine);
-            // Navigate history if cursor is on last line and at end of content
-            if (position.lineNumber === lastLine && position.column === lastLineLength + 1) {
-                this.navigateReplHistory('down');
-            } else {
-                // Default behavior - move cursor down
-                this.replEditor.trigger('keyboard', 'cursorDown', {});
-            }
-        }, '!suggestWidgetVisible');
 
         // Validate syntax as user types
         this.replEditor.onDidChangeModelContent(() => {
@@ -1207,6 +1203,12 @@ class DruidApp {
     }
 
     async handleReplInput(e) {
+        // Only process if this textarea is actually focused
+        // (prevents interference when Monaco REPL editor is active)
+        if (document.activeElement !== this.elements.replInput) {
+            return;
+        }
+        
         // Handle arrow key navigation through command history
         if (e.key === 'ArrowUp') {
             e.preventDefault();
@@ -1279,6 +1281,17 @@ class DruidApp {
     handleKeyboardShortcut(e) {
         const isMeta = e.metaKey || e.ctrlKey;
         
+        // Check if any Monaco editor has focus
+        const editorHasFocus = this.editor && this.editor.hasTextFocus();
+        const replEditorHasFocus = this.replEditor && this.replEditor.hasTextFocus();
+        const replTextareaHasFocus = document.activeElement === this.elements.replInput;
+        
+        // If any editor has focus and it's not a meta command, don't process
+        if (!isMeta && (editorHasFocus || replEditorHasFocus || replTextareaHasFocus)) {
+            return;
+        }
+        
+        // Only process keyboard shortcuts if they're meta/ctrl commands
         if (isMeta && e.key === 'p') {
             e.preventDefault();
             this.runScript();
