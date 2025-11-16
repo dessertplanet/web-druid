@@ -18,25 +18,23 @@ A web-based editor and REPL for [monome crow](https://github.com/monome/crow) an
 
 ## Getting Started
 
-### Option 1: Open Directly in Browser
+### Installation
 
-Simply open `index.html` in a supported browser:
+First, install the required npm packages:
 
 ```bash
-cd src/web-druid
-open index.html  # macOS
-# or
-xdg-open index.html  # Linux
-# or double-click the file in Windows
+npm install
 ```
 
-### Option 2: Serve with Local Server
+This will install:
+- `monaco-editor` - The code editor
+- `luaparse` - Lua syntax parsing
 
-For a better development experience, serve the files with a local HTTP server:
+### Running Locally
+
+Serve the files with a local HTTP server:
 
 ```bash
-cd src/web-druid
-
 # Python 3
 python3 -m http.server 8000
 
@@ -65,25 +63,30 @@ Compared to the command-line version, druid web has some limitations:
 
 ## Deployment
 
-To deploy druid web to a web server:
+To deploy druid web:
 
-1. Upload all files (`index.html`, `druid.js`, `style.css`) to your server
-2. Ensure your site is served over **HTTPS** (required for Web Serial API)
-3. Users can then access the tool directly in their browser
+1. Ensure your repository includes `package.json` and `package-lock.json`
+2. Push to the `deploy` branch to trigger the GitHub Actions workflow
+3. The workflow will automatically:
+   - Install npm dependencies (`monaco-editor` and `luaparse`)
+   - Deploy to GitHub Pages with HTTPS
 
-Example deployment platforms:
-- GitHub Pages (with HTTPS)
-- Netlify
-- Vercel
-- Any static hosting with HTTPS
+The site will be available at your GitHub Pages URL.
+
+Note: HTTPS is required for the Web Serial API to work in production.
 
 ## Development
 
-The project consists of three files:
+The project uses:
+- **Monaco Editor** - Code editor (installed via npm)
+- **luaparse** - Lua syntax parsing (installed via npm)
 
+Main files:
 - `index.html` - HTML structure and layout
 - `druid.js` - Web Serial API integration and REPL logic
 - `style.css` - Styling and theme
+- `package.json` - npm dependencies
+- `.github/workflows/deploy.yml` - GitHub Actions deployment workflow
 
 ### Architecture
 
