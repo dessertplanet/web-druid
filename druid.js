@@ -421,10 +421,17 @@ class DruidApp {
             suggest: {
                 showKeywords: true,
                 showSnippets: true,
-                selectionMode: 'never'  // Don't pre-select suggestions
+                selectionMode: 'never',  // Don't pre-select suggestions
+                filterGraceful: false,
+                snippetsPreventQuickSuggestions: false
             },
-            quickSuggestions: true,
-            acceptSuggestionOnEnter: 'on'
+            quickSuggestions: {
+                other: true,
+                comments: false,
+                strings: false
+            },
+            acceptSuggestionOnEnter: 'on',
+            suggestOnTriggerCharacters: true
         });
 
         // Add placeholder text
@@ -477,8 +484,17 @@ class DruidApp {
             const suggestWidget = document.querySelector('.editor-widget.suggest-widget.visible');
             const isSuggestVisible = suggestWidget !== null;
             
-            // Handle Enter key - send command ONLY when suggestion widget is not visible
-            if (keyCode === monaco.KeyCode.Enter && !e.shiftKey && !isSuggestVisible) {
+            // Check if a suggestion is actually selected (has the focused class)
+            const isSuggestionSelected = isSuggestVisible && 
+                suggestWidget.querySelector('.monaco-list-row.focused') !== null;
+            
+            // Handle Enter key
+            if (keyCode === monaco.KeyCode.Enter && !e.shiftKey) {
+                // If suggestion widget is visible AND a suggestion is selected, let Monaco handle it
+                if (isSuggestionSelected) {
+                    return;
+                }
+                // Otherwise, send the command
                 const code = this.replEditor.getValue().trim();
                 if (code) {
                     e.preventDefault();
@@ -659,7 +675,86 @@ class DruidApp {
     registerCrowCompletions() {
         monaco.languages.registerCompletionItemProvider('lua', {
             provideCompletionItems: (model, position) => {
+                // Get the text before the cursor to detect if user has typed "^" or "^^"
+                const lineContent = model.getLineContent(position.lineNumber);
+                const textBeforeCursor = lineContent.substring(0, position.column - 1);
+                const match = textBeforeCursor.match(/\^*$/);
+                const caretCount = match ? match[0].length : 0;
+                
+                // Create a range that will replace any existing "^" characters
+                const replaceRange = new monaco.Range(
+                    position.lineNumber,
+                    position.column - caretCount,
+                    position.lineNumber,
+                    position.column
+                );
+                
                 const suggestions = [
+                    // Crow control commands
+                    {
+                        label: '^^i',
+                        kind: monaco.languages.CompletionItemKind.Keyword,
+                        insertText: '^^i',
+                        filterText: '^^i',
+                        sortText: '0^^i',
+                        range: replaceRange,
+                        documentation: 'Print identity'
+                    },
+                    {
+                        label: '^^v',
+                        kind: monaco.languages.CompletionItemKind.Keyword,
+                        insertText: '^^v',
+                        filterText: '^^v',
+                        sortText: '0^^v',
+                        range: replaceRange,
+                        documentation: 'Print version'
+                    },
+                    {
+                        label: '^^p',
+                        kind: monaco.languages.CompletionItemKind.Keyword,
+                        insertText: '^^p',
+                        filterText: '^^p',
+                        sortText: '0^^p',
+                        range: replaceRange,
+                        documentation: 'Print current userscript'
+                    },
+                    {
+                        label: '^^r',
+                        kind: monaco.languages.CompletionItemKind.Keyword,
+                        insertText: '^^r',
+                        filterText: '^^r',
+                        sortText: '0^^r',
+                        range: replaceRange,
+                        documentation: 'Restart crow'
+                    },
+                    {
+                        label: '^^k',
+                        kind: monaco.languages.CompletionItemKind.Keyword,
+                        insertText: '^^k',
+                        filterText: '^^k',
+                        sortText: '0^^k',
+                        range: replaceRange,
+                        documentation: 'Kill running script'
+                    },
+                    {
+                        label: '^^c',
+                        kind: monaco.languages.CompletionItemKind.Keyword,
+                        insertText: '^^c',
+                        filterText: '^^c',
+                        sortText: '0^^c',
+                        range: replaceRange,
+                        documentation: 'Clear userscript from flash'
+                    },
+                    {
+                        label: '^^b',
+                        kind: monaco.languages.CompletionItemKind.Keyword,
+                        insertText: '^^b',
+                        filterText: '^^b',
+                        sortText: '0^^b',
+                        range: replaceRange,
+                        documentation: 'Enter bootloader mode'
+                    },
+                    
                     // Lua basics
                     {
                         label: 'print',
@@ -981,7 +1076,8 @@ class DruidApp {
                 ];
 
                 return { suggestions };
-            }
+            },
+            triggerCharacters: ['^', '.', '[', ':', 'i', 'o', 'p', 'l', 'a', 'c', 't', 'm', 'b']
         });
 
         // Register signature help provider
@@ -1407,7 +1503,6 @@ class DruidApp {
             
             await this.crow.writeLine('^^w'); // write to flash
             await this.delay(100);
-            this.outputLine(`Uploaded ${this.scriptName}\n`);
             this.setModified(false);
         } catch (error) {
             this.outputLine(`Upload error: ${error.message}\n`);
@@ -1643,7 +1738,6 @@ class DruidApp {
             
             await this.crow.writeLine('^^w');
             await this.delay(100);
-            this.outputLine(`Uploaded ${file.name}\\n`);
         } catch (error) {
             this.outputLine(`Upload error: ${error.message}\\n`);
         }
@@ -1803,7 +1897,6 @@ class DruidApp {
                 
                 await this.crow.writeLine('^^w');
                 await this.delay(100);
-                this.outputLine(`Uploaded ${script.name}\n`);
             }
         } catch (error) {
             this.outputLine(`Error: ${error.message}`);
