@@ -45,6 +45,30 @@
                     <button id="saveBtn" class="toolbar-btn">save</button>
                     <button id="renameBtn" class="toolbar-btn">rename</button>
                 </div>
+                <div class="toolbar-group layout-toggle-group">
+                    <button id="horizontalLayoutBtn" class="layout-btn active" title="Horizontal layout">
+                        <svg width="20" height="20" viewBox="0 0 20 20">
+                            <rect x="2" y="4" width="7" height="12"/>
+                            <rect x="12" y="4" width="7" height="12"/>
+                        </svg>
+                    </button>
+                    <button id="verticalLayoutBtn" class="layout-btn" title="Vertical layout">
+                        <svg width="20" height="20" viewBox="0 0 20 20">
+                            <rect x="4" y="2" width="12" height="7"/>
+                            <rect x="4" y="12" width="12" height="7"/>
+                        </svg>
+                    </button>
+                    <button id="swapPanesBtn" class="layout-btn" title="Swap panes">
+                        <svg class="swap-horizontal" width="20" height="20" viewBox="0 0 20 20">
+                            <path d="M 6 6 L 14 6 M 6 6 L 8 4 M 6 6 L 8 8" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter"/>
+                            <path d="M 14 14 L 6 14 M 14 14 L 12 12 M 14 14 L 12 16" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter"/>
+                        </svg>
+                        <svg class="swap-vertical" width="20" height="20" viewBox="0 0 20 20" style="display: none;">
+                            <path d="M 6 6 L 6 14 M 6 6 L 4 8 M 6 6 L 8 8" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter"/>
+                            <path d="M 14 14 L 14 6 M 14 14 L 12 12 M 14 14 L 16 12" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter"/>
+                        </svg>
+                    </button>
+                </div>
             </div>
 
             <div class="split-container" id="splitContainer">

@@ -177,6 +177,9 @@ class DruidApp {
             boweryBtn: document.getElementById('boweryBtn'),
             saveBtn: document.getElementById('saveBtn'),
             renameBtn: document.getElementById('renameBtn'),
+            horizontalLayoutBtn: document.getElementById('horizontalLayoutBtn'),
+            verticalLayoutBtn: document.getElementById('verticalLayoutBtn'),
+            swapPanesBtn: document.getElementById('swapPanesBtn'),
             
             // REPL controls
             connectionBtn: document.getElementById('replConnectionBtn'),
@@ -254,6 +257,11 @@ class DruidApp {
         });
         this.elements.saveBtn.addEventListener('click', () => this.saveScript());
         this.elements.renameBtn.addEventListener('click', () => this.renameScript());
+        
+        // Layout toggle buttons
+        this.elements.horizontalLayoutBtn.addEventListener('click', () => this.setLayout('horizontal'));
+        this.elements.verticalLayoutBtn.addEventListener('click', () => this.setLayout('vertical'));
+        this.elements.swapPanesBtn.addEventListener('click', () => this.swapPanes());
 
         // File input
         this.elements.fileInput.addEventListener('change', (e) => this.handleFileSelect(e));
@@ -1282,6 +1290,7 @@ class DruidApp {
         const container = this.elements.splitContainer;
         const handle = this.elements.splitHandle;
         const replPane = this.elements.replPane;
+        const editorPane = this.elements.editorPane;
 
         handle.addEventListener('mousedown', (e) => {
             isResizing = true;
@@ -1293,22 +1302,56 @@ class DruidApp {
             
             const containerRect = container.getBoundingClientRect();
             
-            // Check if we're in vertical layout (narrow viewport)
-            const isVertical = window.innerWidth <= 768;
+            // Check if we're in vertical layout (either forced or responsive)
+            const isForcedVertical = container.classList.contains('force-vertical');
+            const isForcedHorizontal = container.classList.contains('force-horizontal');
+            const isResponsiveVertical = !isForcedHorizontal && window.innerWidth <= 768;
+            const isVertical = isForcedVertical || isResponsiveVertical;
+            
+            // Check which pane comes first in the DOM
+            const editorFirst = editorPane.compareDocumentPosition(replPane) & Node.DOCUMENT_POSITION_FOLLOWING;
             
             if (isVertical) {
-                // Vertical layout: dragging up should make REPL bigger
-                const newHeight = containerRect.bottom - e.clientY;
-                
-                if (newHeight >= 200 && newHeight <= containerRect.height - 200) {
-                    replPane.style.flex = `0 0 ${newHeight}px`;
+                // Vertical layout
+                if (editorFirst) {
+                    // Editor on top, REPL on bottom
+                    const newReplHeight = containerRect.bottom - e.clientY;
+                    const newEditorHeight = containerRect.height - newReplHeight;
+                    
+                    if (newReplHeight >= 200 && newEditorHeight >= 200) {
+                        replPane.style.flex = `0 0 ${newReplHeight}px`;
+                        editorPane.style.flex = `0 0 ${newEditorHeight}px`;
+                    }
+                } else {
+                    // REPL on top, editor on bottom
+                    const newReplHeight = e.clientY - containerRect.top;
+                    const newEditorHeight = containerRect.height - newReplHeight;
+                    
+                    if (newReplHeight >= 200 && newEditorHeight >= 200) {
+                        replPane.style.flex = `0 0 ${newReplHeight}px`;
+                        editorPane.style.flex = `0 0 ${newEditorHeight}px`;
+                    }
                 }
             } else {
-                // Horizontal layout: dragging left should make REPL bigger
-                const newWidth = containerRect.right - e.clientX;
-                
-                if (newWidth >= 200 && newWidth <= containerRect.width - 200) {
-                    replPane.style.flex = `0 0 ${newWidth}px`;
+                // Horizontal layout
+                if (editorFirst) {
+                    // Editor on left, REPL on right
+                    const newReplWidth = containerRect.right - e.clientX;
+                    const newEditorWidth = containerRect.width - newReplWidth;
+                    
+                    if (newReplWidth >= 200 && newEditorWidth >= 200) {
+                        replPane.style.flex = `0 0 ${newReplWidth}px`;
+                        editorPane.style.flex = `0 0 ${newEditorWidth}px`;
+                    }
+                } else {
+                    // REPL on left, editor on right
+                    const newReplWidth = e.clientX - containerRect.left;
+                    const newEditorWidth = containerRect.width - newReplWidth;
+                    
+                    if (newReplWidth >= 200 && newEditorWidth >= 200) {
+                        replPane.style.flex = `0 0 ${newReplWidth}px`;
+                        editorPane.style.flex = `0 0 ${newEditorWidth}px`;
+                    }
                 }
             }
         });
@@ -1316,6 +1359,83 @@ class DruidApp {
         document.addEventListener('mouseup', () => {
             isResizing = false;
         });
+    }
+
+    setLayout(layout) {
+        const container = this.elements.splitContainer;
+        const replPane = this.elements.replPane;
+        const editorPane = this.elements.editorPane;
+        const swapBtn = this.elements.swapPanesBtn;
+        const swapHorizontal = swapBtn.querySelector('.swap-horizontal');
+        const swapVertical = swapBtn.querySelector('.swap-vertical');
+        
+        if (layout === 'vertical') {
+            container.classList.add('force-vertical');
+            container.classList.remove('force-horizontal');
+            this.elements.horizontalLayoutBtn.classList.remove('active');
+            this.elements.verticalLayoutBtn.classList.add('active');
+            
+            // Show vertical arrows for vertical layout
+            swapHorizontal.style.display = 'none';
+            swapVertical.style.display = 'block';
+            
+            // Set 50/50 split for vertical layout
+            const containerHeight = container.getBoundingClientRect().height;
+            const halfHeight = Math.floor(containerHeight / 2);
+            replPane.style.flex = `0 0 ${halfHeight}px`;
+            editorPane.style.flex = `0 0 ${halfHeight}px`;
+        } else {
+            container.classList.add('force-horizontal');
+            container.classList.remove('force-vertical');
+            this.elements.horizontalLayoutBtn.classList.add('active');
+            this.elements.verticalLayoutBtn.classList.remove('active');
+            
+            // Show horizontal arrows for horizontal layout
+            swapHorizontal.style.display = 'block';
+            swapVertical.style.display = 'none';
+            
+            // Reset to default flex for horizontal layout
+            replPane.style.flex = '1';
+            editorPane.style.flex = '1';
+        }
+    }
+
+    swapPanes() {
+        const container = this.elements.splitContainer;
+        const editorPane = this.elements.editorPane;
+        const splitHandle = this.elements.splitHandle;
+        const replPane = this.elements.replPane;
+        
+        // Get current order by checking which comes first
+        const editorFirst = editorPane.compareDocumentPosition(replPane) & Node.DOCUMENT_POSITION_FOLLOWING;
+        
+        if (editorFirst) {
+            // Currently: editor, handle, repl -> swap to: repl, handle, editor
+            container.insertBefore(replPane, editorPane);
+            container.insertBefore(splitHandle, editorPane);
+        } else {
+            // Currently: repl, handle, editor -> swap to: editor, handle, repl
+            container.insertBefore(editorPane, replPane);
+            container.insertBefore(splitHandle, replPane);
+        }
+        
+        // Reset to 50/50 split after swapping
+        const isForcedVertical = container.classList.contains('force-vertical');
+        const isForcedHorizontal = container.classList.contains('force-horizontal');
+        const isResponsiveVertical = !isForcedHorizontal && window.innerWidth <= 768;
+        const isVertical = isForcedVertical || isResponsiveVertical;
+        
+        if (isVertical) {
+            const containerHeight = container.getBoundingClientRect().height;
+            const halfHeight = Math.floor(containerHeight / 2);
+            replPane.style.flex = `0 0 ${halfHeight}px`;
+            editorPane.style.flex = `0 0 ${halfHeight}px`;
+        } else {
+            const containerWidth = container.getBoundingClientRect().width;
+            const halfWidth = Math.floor(containerWidth / 2);
+            replPane.style.flex = `0 0 ${halfWidth}px`;
+            editorPane.style.flex = `0 0 ${halfWidth}px`;
+        }
     }
 
     async handleReplInput(e) {
@@ -1603,16 +1723,42 @@ class DruidApp {
             this.elements.splitHandle.classList.remove('hidden');
             this.elements.replPane.classList.remove('full-width');
             
+            // Reset to 50/50 split when showing the editor
+            const container = this.elements.splitContainer;
+            const replPane = this.elements.replPane;
+            const editorPane = this.elements.editorPane;
+            
+            const isForcedVertical = container.classList.contains('force-vertical');
+            const isForcedHorizontal = container.classList.contains('force-horizontal');
+            const isResponsiveVertical = !isForcedHorizontal && window.innerWidth <= 768;
+            const isVertical = isForcedVertical || isResponsiveVertical;
+            
+            if (isVertical) {
+                const containerHeight = container.getBoundingClientRect().height;
+                const halfHeight = Math.floor(containerHeight / 2);
+                replPane.style.flex = `0 0 ${halfHeight}px`;
+                editorPane.style.flex = `0 0 ${halfHeight}px`;
+            } else {
+                const containerWidth = container.getBoundingClientRect().width;
+                const halfWidth = Math.floor(containerWidth / 2);
+                replPane.style.flex = `0 0 ${halfWidth}px`;
+                editorPane.style.flex = `0 0 ${halfWidth}px`;
+            }
+            
             // Re-layout Monaco editor
             if (this.editor) {
                 this.editor.layout();
             }
         } else {
-            // Hide editor
+            // Hide editor - reset flex styles so REPL can take full width
             this.elements.toolbar.classList.add('hidden');
             this.elements.editorPane.classList.add('hidden');
             this.elements.splitHandle.classList.add('hidden');
             this.elements.replPane.classList.add('full-width');
+            
+            // Clear inline flex styles to let CSS take over
+            this.elements.replPane.style.flex = '';
+            this.elements.editorPane.style.flex = '';
         }
     }
 

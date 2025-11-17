@@ -203,6 +203,37 @@ body {
     cursor: not-allowed;
 }
 
+.layout-toggle-group {
+    margin-left: auto;
+}
+
+.layout-btn {
+    background: none;
+    border: none;
+    color: var(--interactive-medium);
+    padding: 4px 6px;
+    cursor: pointer;
+    transition: color 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.layout-btn:hover {
+    color: var(--interactive-selected);
+}
+
+.layout-btn svg rect {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.5;
+}
+
+.layout-btn.active svg rect {
+    fill: currentColor;
+    stroke: currentColor;
+}
+
 /* Split Container */
 .split-container {
     flex: 1;
@@ -683,6 +714,53 @@ body {
 .bowery-item-size {
     font-size: 0.75rem;
     color: var(--neutral-medium);
+}
+
+/* Manual layout control */
+.split-container.force-vertical {
+    flex-direction: column !important;
+}
+
+.split-container.force-horizontal {
+    flex-direction: row !important;
+}
+
+.split-container.force-vertical .split-handle {
+    width: 100%;
+    height: 6px;
+    cursor: row-resize;
+}
+
+.split-container.force-vertical .split-handle-bar {
+    width: 40px;
+    height: 2px;
+}
+
+.split-container.force-vertical .repl-pane {
+    min-height: 200px;
+}
+
+.split-container.force-vertical .editor-pane {
+    min-height: 200px;
+}
+
+.split-container.force-horizontal .split-handle {
+    width: 6px;
+    height: auto;
+    cursor: col-resize;
+}
+
+.split-container.force-horizontal .split-handle-bar {
+    width: 2px;
+    height: 40px;
+}
+
+.split-container.force-horizontal .repl-pane {
+    min-width: 300px;
+}
+
+.split-container.force-horizontal .editor-pane {
+    min-width: 200px;
 }
 
 /* Responsive design */
