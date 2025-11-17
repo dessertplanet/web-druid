@@ -324,6 +324,7 @@ body {
     background-color: var(--neutral-trim);
     border-radius: 12px;
     padding: 6px 12px;
+    flex-shrink: 0;
 }
 
 .repl-status-indicator {
@@ -461,11 +462,12 @@ body {
 /* REPL Actions */
 .repl-actions {
     display: flex;
-    gap: 8px;
+    gap: 12px;
     padding: 8px 12px;
     border-top: 1px solid var(--neutral-trim);
     background-color: var(--bg-default);
     align-items: center;
+    flex-wrap: wrap;
 }
 
 .repl-actions-spacer {
