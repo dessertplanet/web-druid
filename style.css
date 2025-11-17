@@ -721,6 +721,99 @@ body {
     }
 }
 
+/* Responsive header for narrow screens */
+@media (max-width: 900px) {
+    .header-left {
+        flex-wrap: wrap;
+        max-width: 60%;
+        row-gap: 6px;
+    }
+    
+    .header-left h1 {
+        font-size: 0.85rem;
+    }
+    
+    .header-right {
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        max-width: 35%;
+        row-gap: 6px;
+    }
+    
+    .app-header {
+        min-height: 50px;
+        height: auto;
+        padding-top: 6px;
+        border-top: 6px solid var(--neutral-heavy);
+        border-bottom: none;
+        align-items: flex-start;
+    }
+}
+
+@media (max-width: 700px) {
+    .app-header {
+        min-height: 60px;
+        padding-top: 6px;
+        padding-bottom: 0;
+        border-top: 6px solid var(--neutral-heavy);
+        border-bottom: none;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 6px;
+    }
+    
+    .header-left {
+        position: relative;
+        left: 0;
+        top: 0;
+        padding: 6px 10px 0 10px;
+        max-width: 100%;
+    }
+    
+    .header-right {
+        position: relative;
+        right: 0;
+        top: 0;
+        padding: 0 10px 10px 10px;
+        max-width: 100%;
+    }
+    
+    .header-left,
+    .header-right {
+        z-index: auto;
+    }
+    
+    .workspace {
+        padding-top: 0;
+    }
+}
+
+@media (max-width: 500px) {
+    .header-left {
+        gap: 8px;
+        row-gap: 6px;
+    }
+    
+    .header-right {
+        gap: 8px;
+        row-gap: 6px;
+    }
+    
+    .header-left h1 {
+        font-size: 0.8rem;
+        flex-basis: 100%;
+    }
+    
+    .repl-connection-btn {
+        font-size: 0.85rem;
+        padding: 4px 8px;
+    }
+    
+    .editor-toggle-label {
+        margin-left: 0;
+    }
+}
+
 /* Utility */
 .hidden {
     display: none !important;
