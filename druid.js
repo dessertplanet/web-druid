@@ -1292,10 +1292,24 @@ class DruidApp {
             if (!isResizing) return;
             
             const containerRect = container.getBoundingClientRect();
-            const newWidth = containerRect.right - e.clientX;
             
-            if (newWidth >= 200 && newWidth <= containerRect.width - 200) {
-                replPane.style.flex = `0 0 ${newWidth}px`;
+            // Check if we're in vertical layout (narrow viewport)
+            const isVertical = window.innerWidth <= 768;
+            
+            if (isVertical) {
+                // Vertical layout: dragging up should make REPL bigger
+                const newHeight = containerRect.bottom - e.clientY;
+                
+                if (newHeight >= 200 && newHeight <= containerRect.height - 200) {
+                    replPane.style.flex = `0 0 ${newHeight}px`;
+                }
+            } else {
+                // Horizontal layout: dragging left should make REPL bigger
+                const newWidth = containerRect.right - e.clientX;
+                
+                if (newWidth >= 200 && newWidth <= containerRect.width - 200) {
+                    replPane.style.flex = `0 0 ${newWidth}px`;
+                }
             }
         });
 
