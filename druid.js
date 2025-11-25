@@ -221,7 +221,12 @@ class DruidApp {
             boweryList: document.getElementById('boweryList'),
             bbboweryBtn: document.getElementById('bbboweryBtn'),
             bbboweryModal: document.getElementById('bbboweryModal'),
-            closeBbbowery: document.getElementById('closeBbbowery')
+            closeBbbowery: document.getElementById('closeBbbowery'),
+            bbboweryAction: document.getElementById('bbboweryAction'),
+            bbbowerySearch: document.getElementById('bbbowerySearch'),
+            bbboweryLoading: document.getElementById('bbboweryLoading'),
+            bbboweryError: document.getElementById('bbboweryError'),
+            bbboweryList: document.getElementById('bbboweryList')
         };
 
         this.outputLine('//// welcome. connect to crow or blackbird to begin.');
@@ -252,9 +257,7 @@ class DruidApp {
         this.elements.newBtn.addEventListener('click', () => this.newScript());
         this.elements.openBtn.addEventListener('click', () => this.openScript());
         this.elements.boweryBtn.addEventListener('click', () => this.openBoweryBrowser());
-        this.elements.bbboweryBtn.addEventListener('click', () => {
-            this.elements.bbboweryModal.style.display = 'flex';
-        });
+        this.elements.bbboweryBtn.addEventListener('click', () => this.openBbboweryBrowser());
         this.elements.saveBtn.addEventListener('click', () => this.saveScript());
         this.elements.renameBtn.addEventListener('click', () => this.renameScript());
         
@@ -293,6 +296,10 @@ class DruidApp {
         
         this.elements.bowerySearch.addEventListener('input', (e) => {
             this.filterBoweryScripts(e.target.value);
+        });
+        
+        this.elements.bbbowerySearch.addEventListener('input', (e) => {
+            this.filterBbboweryScripts(e.target.value);
         });
 
         // Crow callbacks
@@ -2040,6 +2047,147 @@ class DruidApp {
                 this.updateScriptName();
             } else {
                 // If editor is hidden, auto-upload to crow
+                if (!this.crow.isConnected) {
+                    this.outputLine('Error: Not connected to usb device (click connect in the header)');
+                    return;
+                }
+                
+                this.outputLine(`Uploading ${script.name}...`);
+                await this.crow.writeLine('^^s');
+                await this.delay(200);
+                
+                const lines = content.split('\n');
+                for (const line of lines) {
+                    await this.crow.writeLine(line);
+                    await this.delay(1);
+                }
+                
+                await this.crow.writeLine('^^w');
+                await this.delay(100);
+            }
+        } catch (error) {
+            this.outputLine(`Error: ${error.message}`);
+        }
+    }
+
+    async openBbboweryBrowser() {
+        this.elements.bbboweryModal.style.display = 'flex';
+        this.elements.bbboweryLoading.style.display = 'block';
+        this.elements.bbboweryError.style.display = 'none';
+        this.elements.bbboweryList.style.display = 'none';
+        this.elements.bbbowerySearch.value = '';
+        
+        // Update action text based on editor visibility
+        if (this.editorVisible) {
+            this.elements.bbboweryAction.textContent = 'Select a script to load it into the editor';
+        } else {
+            this.elements.bbboweryAction.textContent = 'Select a script to upload it directly to blackbird';
+        }
+        
+        try {
+            // Fetch the repo tree from GitHub API
+            const response = await fetch('https://api.github.com/repos/dessertplanet/Workshop_Computer/git/trees/main?recursive=1');
+            
+            if (!response.ok) {
+                throw new Error(`GitHub API error: ${response.status}`);
+            }
+            
+            const data = await response.json();
+            
+            // Filter for .lua files in the bbbowery directory
+            this.bbboweryScripts = data.tree
+                .filter(item => 
+                    item.type === 'blob' && 
+                    item.path.startsWith('releases/41_blackbird/examples/bbbowery/') &&
+                    item.path.endsWith('.lua')
+                )
+                .map(item => ({
+                    name: item.path.split('/').pop(),
+                    path: `bbbowery/${item.path.split('/').pop()}`,
+                    size: item.size,
+                    url: `https://raw.githubusercontent.com/dessertplanet/Workshop_Computer/main/${item.path}`
+                }))
+                .sort((a, b) => a.name.localeCompare(b.name));
+            
+            this.displayBbboweryScripts(this.bbboweryScripts);
+            
+            this.elements.bbboweryLoading.style.display = 'none';
+            this.elements.bbboweryList.style.display = 'block';
+            
+        } catch (error) {
+            this.elements.bbboweryLoading.style.display = 'none';
+            this.elements.bbboweryError.style.display = 'block';
+            this.elements.bbboweryError.textContent = `Error loading bbbowery scripts: ${error.message}`;
+        }
+    }
+
+    displayBbboweryScripts(scripts) {
+        this.elements.bbboweryList.innerHTML = '';
+        
+        if (scripts.length === 0) {
+            this.elements.bbboweryList.innerHTML = '<div style="padding: 2rem; text-align: center; color: var(--neutral-medium);">No scripts found</div>';
+            return;
+        }
+        
+        scripts.forEach(script => {
+            const item = document.createElement('div');
+            item.className = 'bowery-item';
+            
+            const name = document.createElement('div');
+            name.className = 'bowery-item-name';
+            name.textContent = script.name;
+            
+            const path = document.createElement('div');
+            path.className = 'bowery-item-path';
+            path.textContent = script.path;
+            
+            const size = document.createElement('div');
+            size.className = 'bowery-item-size';
+            size.textContent = `${(script.size / 1024).toFixed(1)} KB`;
+            
+            item.appendChild(name);
+            item.appendChild(path);
+            item.appendChild(size);
+            
+            item.addEventListener('click', () => this.loadBbboweryScript(script));
+            
+            this.elements.bbboweryList.appendChild(item);
+        });
+    }
+
+    filterBbboweryScripts(query) {
+        if (!this.bbboweryScripts) return;
+        
+        const filtered = this.bbboweryScripts.filter(script => {
+            const searchText = `${script.name} ${script.path}`.toLowerCase();
+            return searchText.includes(query.toLowerCase());
+        });
+        
+        this.displayBbboweryScripts(filtered);
+    }
+
+    async loadBbboweryScript(script) {
+        try {
+            this.elements.bbboweryModal.style.display = 'none';
+            
+            const response = await fetch(script.url);
+            if (!response.ok) {
+                throw new Error(`Failed to fetch (check connection): ${response.status}`);
+            }
+            
+            const content = await response.text();
+            
+            // If editor is visible, load into editor
+            if (this.editorVisible) {
+                this.scriptName = script.name;
+                this.currentFile = null;
+                if (this.editor) {
+                    this.editor.setValue(content);
+                }
+                this.setModified(false);
+                this.updateScriptName();
+            } else {
+                // If editor is hidden, auto-upload to blackbird
                 if (!this.crow.isConnected) {
                     this.outputLine('Error: Not connected to usb device (click connect in the header)');
                     return;
