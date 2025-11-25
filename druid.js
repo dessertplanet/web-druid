@@ -1609,6 +1609,8 @@ class DruidApp {
         const code = this.editor.getValue();
         
         try {
+            await this.crow.writeLine('crow.reset()');
+            await this.delay(100);
             await this.crow.writeLine('^^s'); // start script upload
             await this.delay(200);
             
@@ -1620,7 +1622,6 @@ class DruidApp {
             
             await this.crow.writeLine('^^e'); // execute script
             await this.delay(100);
-            this.outputLine(`Ran ${this.scriptName}\n`);
         } catch (error) {
             this.outputLine(`Run error: ${error.message}\n`);
         }
