@@ -80,14 +80,27 @@
                 <div class="repl-pane full-width" id="replPane">
                     <div class="repl-content">
                         <div id="output" class="repl-output"></div>
+                        <div class="stream-monitors">
+                            <div class="stream-monitor" id="streamMonitor1">
+                                <div class="stream-monitor-header">input[1]</div>
+                                <canvas class="stream-monitor-canvas" id="streamCanvas1" width="200" height="60"></canvas>
+                                <div class="stream-monitor-value" id="streamValue1">---</div>
+                            </div>
+                            <div class="stream-monitor" id="streamMonitor2">
+                                <div class="stream-monitor-header">input[2]</div>
+                                <canvas class="stream-monitor-canvas" id="streamCanvas2" width="200" height="60"></canvas>
+                                <div class="stream-monitor-value" id="streamValue2">---</div>
+                            </div>
+                        </div>
                         <div class="repl-actions">
                             <div class="repl-status-pill">
                                 <span id="replStatusIndicator" class="repl-status-indicator"></span>
                                 <span id="replStatusText" class="repl-status-text">not connected</span>
                             </div>
                             <button id="replConnectionBtn" class="repl-connection-btn">connect</button>
+                            <button id="resetBtn" class="repl-action-btn">reset</button>
                             <button id="helpBtn" class="repl-action-btn">help</button>
-                            <button id="clearBtn" class="repl-action-btn">clear</button>
+                            <button id="clearBtn" class="repl-action-btn">cleanup</button>
                             <div class="repl-actions-spacer"></div>
                             <div class="autocomplete-pill">
                                 <span class="repl-autocomplete-label">auto-complete</span>
