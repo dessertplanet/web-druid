@@ -2310,9 +2310,9 @@ class DruidApp {
         
         // Update action text based on editor visibility
         if (this.editorVisible) {
-            this.elements.bbboweryAction.textContent = 'Select a script to load it into the editor';
+            this.elements.bbboweryAction.textContent = '(bbbowery scripts require MTM Workshop Computer)';
         } else {
-            this.elements.bbboweryAction.textContent = 'Select a script to upload it directly to blackbird';
+            this.elements.bbboweryAction.textContent = '(bbbowery scripts require MTM Workshop Computer)';
         }
         
         try {
