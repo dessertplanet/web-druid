@@ -13,6 +13,7 @@ class CrowConnection {
         this.writableStreamClosed = null;
         this.onDataReceived = null;
         this.onConnectionChange = null;
+        this.lineBuffer = ''; // Buffer for incomplete lines
     }
 
     async connect() {
@@ -61,7 +62,19 @@ class CrowConnection {
                 const { value, done } = await this.reader.read();
                 if (done) break;
                 if (value && this.onDataReceived) {
-                    this.onDataReceived(value);
+                    // Add to buffer
+                    this.lineBuffer += value;
+                    
+                    // Process complete lines (ending with \n)
+                    let newlineIndex;
+                    while ((newlineIndex = this.lineBuffer.indexOf('\n')) !== -1) {
+                        const line = this.lineBuffer.substring(0, newlineIndex);
+                        this.lineBuffer = this.lineBuffer.substring(newlineIndex + 1);
+                        
+                        if (line) {
+                            this.onDataReceived(line);
+                        }
+                    }
                 }
             }
         } catch (error) {
@@ -80,6 +93,7 @@ class CrowConnection {
                 
                 this.reader = null;
                 this.writer = null;
+                this.lineBuffer = ''; // Clear buffer on disconnect
                 
                 if (this.port) {
                     await this.port.close().catch(() => {});
@@ -193,8 +207,15 @@ class DruidApp {
             replEditorContainer: document.getElementById('replEditorContainer'),
             replInputContainer: document.querySelector('.repl-input-container'),
             toggleReplAutocomplete: document.getElementById('toggleReplAutocomplete'),
+            resetBtn: document.getElementById('resetBtn'),
             helpBtn: document.getElementById('helpBtn'),
             clearBtn: document.getElementById('clearBtn'),
+            
+            // Stream monitors
+            streamCanvas1: document.getElementById('streamCanvas1'),
+            streamCanvas2: document.getElementById('streamCanvas2'),
+            streamValue1: document.getElementById('streamValue1'),
+            streamValue2: document.getElementById('streamValue2'),
             
             // Split pane
             toolbar: document.getElementById('toolbar'),
@@ -221,9 +242,27 @@ class DruidApp {
             boweryList: document.getElementById('boweryList'),
             bbboweryBtn: document.getElementById('bbboweryBtn'),
             bbboweryModal: document.getElementById('bbboweryModal'),
-            closeBbbowery: document.getElementById('closeBbbowery')
+            closeBbbowery: document.getElementById('closeBbbowery'),
+            bbboweryAction: document.getElementById('bbboweryAction'),
+            bbbowerySearch: document.getElementById('bbbowerySearch'),
+            bbboweryLoading: document.getElementById('bbboweryLoading'),
+            bbboweryError: document.getElementById('bbboweryError'),
+            bbboweryList: document.getElementById('bbboweryList')
         };
 
+        // Initialize stream monitors
+        this.streamData = {
+            1: [],
+            2: []
+        };
+        this.streamContexts = {
+            1: this.elements.streamCanvas1.getContext('2d'),
+            2: this.elements.streamCanvas2.getContext('2d')
+        };
+        
+        // Start continuous animation for smooth scrolling
+        this.startStreamAnimation();
+        
         this.outputLine('//// welcome. connect to crow or blackbird to begin.');
     }
 
@@ -252,9 +291,7 @@ class DruidApp {
         this.elements.newBtn.addEventListener('click', () => this.newScript());
         this.elements.openBtn.addEventListener('click', () => this.openScript());
         this.elements.boweryBtn.addEventListener('click', () => this.openBoweryBrowser());
-        this.elements.bbboweryBtn.addEventListener('click', () => {
-            this.elements.bbboweryModal.style.display = 'flex';
-        });
+        this.elements.bbboweryBtn.addEventListener('click', () => this.openBbboweryBrowser());
         this.elements.saveBtn.addEventListener('click', () => this.saveScript());
         this.elements.renameBtn.addEventListener('click', () => this.renameScript());
         
@@ -270,6 +307,7 @@ class DruidApp {
         this.elements.replInput.addEventListener('keydown', (e) => this.handleReplInput(e));
 
         // REPL actions
+        this.elements.resetBtn.addEventListener('click', () => this.resetCrow());
         this.elements.helpBtn.addEventListener('click', () => this.showHelp());
         this.elements.clearBtn.addEventListener('click', () => this.clearOutput());
         
@@ -294,6 +332,10 @@ class DruidApp {
         this.elements.bowerySearch.addEventListener('input', (e) => {
             this.filterBoweryScripts(e.target.value);
         });
+        
+        this.elements.bbbowerySearch.addEventListener('input', (e) => {
+            this.filterBbboweryScripts(e.target.value);
+        });
 
         // Crow callbacks
         this.crow.onDataReceived = (data) => this.handleCrowOutput(data);
@@ -307,6 +349,12 @@ class DruidApp {
     }
 
     initializeEditor() {
+        // Ensure require is available
+        if (typeof require === 'undefined') {
+            console.error('RequireJS not loaded');
+            return;
+        }
+        
         require.config({ paths: { vs: 'node_modules/monaco-editor/min/vs' } });
         
         require(['vs/editor/editor.main'], () => {
@@ -654,6 +702,7 @@ class DruidApp {
             this.elements.replEditorContainer.style.display = 'block';
             this.elements.replInput.style.display = 'none';
             this.elements.replInputContainer.classList.add('editor-mode');
+            this.elements.replInputContainer.classList.remove('autocomplete-disabled');
             
             // Transfer any content from textarea to editor
             const textareaValue = this.elements.replInput.value;
@@ -668,6 +717,7 @@ class DruidApp {
             this.elements.replEditorContainer.style.display = 'none';
             this.elements.replInput.style.display = 'block';
             this.elements.replInputContainer.classList.remove('editor-mode');
+            this.elements.replInputContainer.classList.add('autocomplete-disabled');
             
             // Transfer any content from editor to textarea
             const editorValue = this.replEditor.getValue();
@@ -1592,7 +1642,176 @@ class DruidApp {
 
     handleCrowOutput(data) {
         const cleaned = data.replace(/\r/g, '');
-        this.outputText(cleaned);
+        if (!cleaned) return;
+        
+        // Filter out pubview messages entirely - check for both formats
+        // ^^pubview(...) or pubview(...)
+        if (cleaned.includes('pubview(')) {
+            return;
+        }
+        
+        // Parse messages similar to monome/druid's process_line
+        // Check if line contains ^^ events
+        if (cleaned.includes('^^')) {
+            const parts = cleaned.split('^^');
+            for (const part of parts) {
+                if (!part.trim()) continue;
+                
+                // Try to parse as event(args) format
+                const match = part.match(/^(\w+)\(([^)]*)\)/);
+                if (match) {
+                    const event = match[1];
+                    const argsStr = match[2];
+                    const args = argsStr ? argsStr.split(',').map(s => s.trim()) : [];
+                    
+                    this.handleCrowEvent(event, args);
+                } else {
+                    // Not a recognized event format, output as-is
+                    if (part.trim()) {
+                        this.outputLine(part);
+                    }
+                }
+            }
+        } else {
+            // No ^^ prefix - this is regular output
+            this.outputLine(cleaned);
+        }
+    }
+
+    handleCrowEvent(event, args) {
+        // Handle specific crow events (messages with ^^ prefix)
+        switch (event) {
+            case 'pubview':
+                // Silently filter out pubview messages - for internal browser use
+                return;
+                
+            case 'stream':
+            case 'change':
+                // Input monitoring events - parse and display in stream monitors
+                if (args.length >= 2) {
+                    const channel = parseInt(args[0]);
+                    const value = parseFloat(args[1]);
+                    
+                    if (channel === 1 || channel === 2) {
+                        this.updateStreamMonitor(channel, value);
+                    }
+                }
+                break;
+                
+            case 'pupdate':
+                // Parameter updates - silently ignored
+                return;
+                
+            default:
+                // Output other events
+                this.outputLine(`^^${event}(${args.join(', ')})`);
+                break;
+        }
+    }
+
+    updateStreamMonitor(channel, value) {
+        // Show monitor if this is the first stream message for this channel
+        const monitorElement = document.getElementById(`streamMonitor${channel}`);
+        if (monitorElement && !monitorElement.classList.contains('active')) {
+            monitorElement.classList.add('active');
+        }
+        
+        // Add value with timestamp (keep last 5 seconds of data)
+        const now = Date.now();
+        this.streamData[channel].push({ time: now, value: value });
+        
+        // Remove data older than 5 seconds
+        const cutoff = now - 5000; // 5 seconds in milliseconds
+        while (this.streamData[channel].length > 0 && this.streamData[channel][0].time < cutoff) {
+            this.streamData[channel].shift();
+        }
+        
+        // Update value display
+        const valueElement = this.elements[`streamValue${channel}`];
+        valueElement.textContent = value.toFixed(4) + 'V';
+        
+        // Graph is continuously drawn by animation loop
+    }
+
+    startStreamAnimation() {
+        const animate = () => {
+            // Redraw both monitors if they have data and are visible
+            const monitor1 = document.getElementById('streamMonitor1');
+            const monitor2 = document.getElementById('streamMonitor2');
+            
+            if (monitor1 && monitor1.classList.contains('active') && this.streamData[1].length > 0) {
+                this.drawStreamGraph(1);
+            }
+            if (monitor2 && monitor2.classList.contains('active') && this.streamData[2].length > 0) {
+                this.drawStreamGraph(2);
+            }
+            
+            requestAnimationFrame(animate);
+        };
+        
+        requestAnimationFrame(animate);
+    }
+
+    drawStreamGraph(channel) {
+        const canvas = this.elements[`streamCanvas${channel}`];
+        const ctx = this.streamContexts[channel];
+        const data = this.streamData[channel];
+        
+        if (!ctx || data.length === 0) return;
+        
+        const width = canvas.width;
+        const height = canvas.height;
+        const padding = 4;
+        const graphHeight = height - (padding * 2);
+        const graphWidth = width - (padding * 2);
+        
+        // Clear canvas
+        ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--bg-subdued').trim();
+        ctx.fillRect(0, 0, width, height);
+        
+        // Find min/max for scaling - start with -5V to +5V range and expand if needed
+        let minV = -5;
+        let maxV = 5;
+        
+        // Check if any values exceed the default range
+        data.forEach(point => {
+            if (point.value < minV) minV = Math.floor(point.value);
+            if (point.value > maxV) maxV = Math.ceil(point.value);
+        });
+        
+        const range = maxV - minV;
+        
+        // Draw zero line
+        const zeroY = padding + graphHeight - ((0 - minV) / range * graphHeight);
+        ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--neutral-medium').trim();
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(padding, zeroY);
+        ctx.lineTo(width - padding, zeroY);
+        ctx.stroke();
+        
+        // Draw waveform based on time (5 second window)
+        ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--interactive-selected').trim();
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        
+        const now = Date.now();
+        const timeWindow = 5000; // 5 seconds in milliseconds
+        
+        data.forEach((point, index) => {
+            // Map time to x position (right edge is now, left edge is 6 seconds ago)
+            const timeFromNow = now - point.time;
+            const x = padding + graphWidth - (timeFromNow / timeWindow * graphWidth);
+            const y = padding + graphHeight - ((point.value - minV) / range * graphHeight);
+            
+            if (index === 0) {
+                ctx.moveTo(x, y);
+            } else {
+                ctx.lineTo(x, y);
+            }
+        });
+        
+        ctx.stroke();
     }
 
     async runScript() {
@@ -1602,6 +1821,8 @@ class DruidApp {
         const code = this.editor.getValue();
         
         try {
+            await this.crow.writeLine('crow.reset()');
+            await this.delay(100);
             await this.crow.writeLine('^^s'); // start script upload
             await this.delay(200);
             
@@ -1613,7 +1834,6 @@ class DruidApp {
             
             await this.crow.writeLine('^^e'); // execute script
             await this.delay(100);
-            this.outputLine(`Ran ${this.scriptName}\n`);
         } catch (error) {
             this.outputLine(`Run error: ${error.message}\n`);
         }
@@ -1781,6 +2001,24 @@ class DruidApp {
 
     clearOutput() {
         this.elements.output.textContent = '';
+        this.hideStreamMonitors();
+    }
+
+    hideStreamMonitors() {
+        const monitor1 = document.getElementById('streamMonitor1');
+        const monitor2 = document.getElementById('streamMonitor2');
+        if (monitor1) monitor1.classList.remove('active');
+        if (monitor2) monitor2.classList.remove('active');
+    }
+
+    resetCrow() {
+        if (!this.crow.isConnected) {
+            this.outputLine('Error: Not connected to usb device');
+            return;
+        }
+        this.outputLine('> crow.reset()');
+        this.crow.writeLine('crow.reset()');  
+        this.hideStreamMonitors();
     }
 
     showHelp() {
@@ -2040,6 +2278,147 @@ class DruidApp {
                 this.updateScriptName();
             } else {
                 // If editor is hidden, auto-upload to crow
+                if (!this.crow.isConnected) {
+                    this.outputLine('Error: Not connected to usb device (click connect in the header)');
+                    return;
+                }
+                
+                this.outputLine(`Uploading ${script.name}...`);
+                await this.crow.writeLine('^^s');
+                await this.delay(200);
+                
+                const lines = content.split('\n');
+                for (const line of lines) {
+                    await this.crow.writeLine(line);
+                    await this.delay(1);
+                }
+                
+                await this.crow.writeLine('^^w');
+                await this.delay(100);
+            }
+        } catch (error) {
+            this.outputLine(`Error: ${error.message}`);
+        }
+    }
+
+    async openBbboweryBrowser() {
+        this.elements.bbboweryModal.style.display = 'flex';
+        this.elements.bbboweryLoading.style.display = 'block';
+        this.elements.bbboweryError.style.display = 'none';
+        this.elements.bbboweryList.style.display = 'none';
+        this.elements.bbbowerySearch.value = '';
+        
+        // Update action text based on editor visibility
+        if (this.editorVisible) {
+            this.elements.bbboweryAction.textContent = '(bbbowery scripts require MTM Workshop Computer)';
+        } else {
+            this.elements.bbboweryAction.textContent = '(bbbowery scripts require MTM Workshop Computer)';
+        }
+        
+        try {
+            // Fetch the repo tree from GitHub API
+            const response = await fetch('https://api.github.com/repos/dessertplanet/Workshop_Computer/git/trees/main?recursive=1');
+            
+            if (!response.ok) {
+                throw new Error(`GitHub API error: ${response.status}`);
+            }
+            
+            const data = await response.json();
+            
+            // Filter for .lua files in the bbbowery directory
+            this.bbboweryScripts = data.tree
+                .filter(item => 
+                    item.type === 'blob' && 
+                    item.path.startsWith('releases/41_blackbird/examples/bbbowery/') &&
+                    item.path.endsWith('.lua')
+                )
+                .map(item => ({
+                    name: item.path.split('/').pop(),
+                    path: `bbbowery/${item.path.split('/').pop()}`,
+                    size: item.size,
+                    url: `https://raw.githubusercontent.com/dessertplanet/Workshop_Computer/main/${item.path}`
+                }))
+                .sort((a, b) => a.name.localeCompare(b.name));
+            
+            this.displayBbboweryScripts(this.bbboweryScripts);
+            
+            this.elements.bbboweryLoading.style.display = 'none';
+            this.elements.bbboweryList.style.display = 'block';
+            
+        } catch (error) {
+            this.elements.bbboweryLoading.style.display = 'none';
+            this.elements.bbboweryError.style.display = 'block';
+            this.elements.bbboweryError.textContent = `Error loading bbbowery scripts: ${error.message}`;
+        }
+    }
+
+    displayBbboweryScripts(scripts) {
+        this.elements.bbboweryList.innerHTML = '';
+        
+        if (scripts.length === 0) {
+            this.elements.bbboweryList.innerHTML = '<div style="padding: 2rem; text-align: center; color: var(--neutral-medium);">No scripts found</div>';
+            return;
+        }
+        
+        scripts.forEach(script => {
+            const item = document.createElement('div');
+            item.className = 'bowery-item';
+            
+            const name = document.createElement('div');
+            name.className = 'bowery-item-name';
+            name.textContent = script.name;
+            
+            const path = document.createElement('div');
+            path.className = 'bowery-item-path';
+            path.textContent = script.path;
+            
+            const size = document.createElement('div');
+            size.className = 'bowery-item-size';
+            size.textContent = `${(script.size / 1024).toFixed(1)} KB`;
+            
+            item.appendChild(name);
+            item.appendChild(path);
+            item.appendChild(size);
+            
+            item.addEventListener('click', () => this.loadBbboweryScript(script));
+            
+            this.elements.bbboweryList.appendChild(item);
+        });
+    }
+
+    filterBbboweryScripts(query) {
+        if (!this.bbboweryScripts) return;
+        
+        const filtered = this.bbboweryScripts.filter(script => {
+            const searchText = `${script.name} ${script.path}`.toLowerCase();
+            return searchText.includes(query.toLowerCase());
+        });
+        
+        this.displayBbboweryScripts(filtered);
+    }
+
+    async loadBbboweryScript(script) {
+        try {
+            this.elements.bbboweryModal.style.display = 'none';
+            
+            const response = await fetch(script.url);
+            if (!response.ok) {
+                throw new Error(`Failed to fetch (check connection): ${response.status}`);
+            }
+            
+            const content = await response.text();
+            
+            // If editor is visible, load into editor
+            if (this.editorVisible) {
+                this.scriptName = script.name;
+                this.currentFile = null;
+                if (this.editor) {
+                    this.editor.setValue(content);
+                }
+                this.setModified(false);
+                this.updateScriptName();
+            } else {
+                // If editor is hidden, auto-upload to blackbird
                 if (!this.crow.isConnected) {
                     this.outputLine('Error: Not connected to usb device (click connect in the header)');
                     return;

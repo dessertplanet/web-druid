@@ -11,17 +11,21 @@
     <div class="app-container">
         <header class="app-header">
             <div class="header-left">
-                <h1>//// web-druid</h1>
+                <div class="title-pill">
+                    <h1>//// web-druid</h1>
+                </div>
                 <button id="boweryBtn" class="repl-connection-btn">bowery</button>
                 <button id="bbboweryBtn" class="repl-connection-btn">bbbowery</button>
             </div>
             <div class="header-right">
                 <button id="scriptReferenceBtn" class="repl-connection-btn">script reference</button>
-                <span class="editor-toggle-label">editor</span>
-                <label class="toggle-switch">
-                    <input type="checkbox" id="toggleEditorBtn">
-                    <span class="toggle-slider"></span>
-                </label>
+                <div class="editor-toggle-pill">
+                    <span class="editor-toggle-label">editor</span>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="toggleEditorBtn">
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
             </div>
         </header>
 
@@ -76,20 +80,35 @@
                 <div class="repl-pane full-width" id="replPane">
                     <div class="repl-content">
                         <div id="output" class="repl-output"></div>
+                        <div class="stream-monitors">
+                            <div class="stream-monitor" id="streamMonitor1">
+                                <div class="stream-monitor-header">input[1]</div>
+                                <canvas class="stream-monitor-canvas" id="streamCanvas1" width="200" height="60"></canvas>
+                                <div class="stream-monitor-value" id="streamValue1">---</div>
+                            </div>
+                            <div class="stream-monitor" id="streamMonitor2">
+                                <div class="stream-monitor-header">input[2]</div>
+                                <canvas class="stream-monitor-canvas" id="streamCanvas2" width="200" height="60"></canvas>
+                                <div class="stream-monitor-value" id="streamValue2">---</div>
+                            </div>
+                        </div>
                         <div class="repl-actions">
                             <div class="repl-status-pill">
                                 <span id="replStatusIndicator" class="repl-status-indicator"></span>
                                 <span id="replStatusText" class="repl-status-text">not connected</span>
                             </div>
                             <button id="replConnectionBtn" class="repl-connection-btn">connect</button>
+                            <button id="resetBtn" class="repl-action-btn">reset</button>
                             <button id="helpBtn" class="repl-action-btn">help</button>
-                            <button id="clearBtn" class="repl-action-btn">clear</button>
+                            <button id="clearBtn" class="repl-action-btn">cleanup</button>
                             <div class="repl-actions-spacer"></div>
-                            <span class="repl-autocomplete-label">auto-complete</span>
-                            <label class="toggle-switch repl-toggle">
-                                <input type="checkbox" id="toggleReplAutocomplete" checked>
-                                <span class="toggle-slider"></span>
-                            </label>
+                            <div class="autocomplete-pill">
+                                <span class="repl-autocomplete-label">auto-complete</span>
+                                <label class="toggle-switch repl-toggle">
+                                    <input type="checkbox" id="toggleReplAutocomplete" checked>
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
                         </div>
                         <div class="repl-input-container">
                             <div id="replEditorContainer" class="repl-editor-container" style="display: none;"></div>
@@ -137,9 +156,16 @@
                 <h2>Browse bbbowery scripts</h2>
                 <button id="closeBbbowery" class="modal-close">&times;</button>
             </div>
-            <div class="modal-info" style="text-align: center; padding: 3rem;">
-                <div class="info-line" style="font-size: 1.2rem;">Coming soon...</div>
+            <div class="modal-info">
+                <div id="bbboweryAction" class="info-line"></div>
+                <div class="info-line">Scripts fetched from <a href="https://github.com/TomWhitwell/Workshop_Computer/tree/main/releases/41_blackbird/examples/bbbowery" target="_blank">github.com/TomWhitwell/Workshop_Computer</a></div>
             </div>
+            <div class="modal-search">
+                <input type="text" id="bbbowerySearch" placeholder="Search scripts..." class="search-input">
+            </div>
+            <div id="bbboweryLoading" class="modal-loading">Loading scripts...</div>
+            <div id="bbboweryError" class="modal-error" style="display: none;"></div>
+            <div id="bbboweryList" class="bowery-list" style="display: none;"></div>
         </div>
     </div>
 
