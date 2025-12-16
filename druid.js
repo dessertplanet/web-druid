@@ -157,6 +157,8 @@ class DruidApp {
         this.editor = null;
         this.replEditor = null;
         this.replAutocompleteEnabled = true;
+        this.splitState = null;
+        this._resizeRaf = null;
         this.scriptName = 'untitled.lua';
         this.scriptModified = false;
         this.currentFile = null;
@@ -346,6 +348,101 @@ class DruidApp {
 
         // Drag and drop
         this.setupDragAndDrop();
+
+        // Keep split panes filling the viewport on window resize
+        window.addEventListener('resize', () => this.handleWindowResize());
+    }
+
+    getCurrentSplitOrientation() {
+        const container = this.elements.splitContainer;
+        const isForcedVertical = container.classList.contains('force-vertical');
+        const isForcedHorizontal = container.classList.contains('force-horizontal');
+        const isResponsiveVertical = !isForcedHorizontal && window.innerWidth <= 768;
+        return (isForcedVertical || isResponsiveVertical) ? 'vertical' : 'horizontal';
+    }
+
+    getSplitAvailableSize(orientation) {
+        const containerRect = this.elements.splitContainer.getBoundingClientRect();
+        const handleHidden = this.elements.splitHandle.classList.contains('hidden');
+        const handleRect = handleHidden ? { width: 0, height: 0 } : this.elements.splitHandle.getBoundingClientRect();
+
+        if (orientation === 'vertical') {
+            return Math.max(0, containerRect.height - handleRect.height);
+        }
+
+        return Math.max(0, containerRect.width - handleRect.width);
+    }
+
+    captureSplitState() {
+        if (this.elements.editorPane.classList.contains('hidden')) {
+            this.splitState = null;
+            return;
+        }
+
+        const orientation = this.getCurrentSplitOrientation();
+        const available = this.getSplitAvailableSize(orientation);
+        if (available <= 0) return;
+
+        const replRect = this.elements.replPane.getBoundingClientRect();
+        const replSize = orientation === 'vertical' ? replRect.height : replRect.width;
+        const replFraction = Math.min(0.95, Math.max(0.05, replSize / available));
+
+        this.splitState = { orientation, replFraction };
+    }
+
+    applySplitState() {
+        // If editor is hidden, let the REPL take full space via CSS.
+        if (this.elements.editorPane.classList.contains('hidden')) {
+            return;
+        }
+
+        const orientation = this.getCurrentSplitOrientation();
+        const available = this.getSplitAvailableSize(orientation);
+        if (available <= 0) return;
+
+        const replPane = this.elements.replPane;
+        const editorPane = this.elements.editorPane;
+
+        let replFraction = 0.5;
+        if (this.splitState && this.splitState.orientation === orientation) {
+            replFraction = this.splitState.replFraction;
+        }
+
+        // Match the drag constraints (200px) so we never create dead space.
+        const minPaneSize = 200;
+        let replTarget = Math.round(available * replFraction);
+        let editorTarget = available - replTarget;
+
+        if (replTarget < minPaneSize) {
+            replTarget = minPaneSize;
+            editorTarget = Math.max(minPaneSize, available - replTarget);
+        }
+        if (editorTarget < minPaneSize) {
+            editorTarget = minPaneSize;
+            replTarget = Math.max(minPaneSize, available - editorTarget);
+        }
+
+        replPane.style.flex = `0 0 ${replTarget}px`;
+        editorPane.style.flex = `0 0 ${editorTarget}px`;
+
+        this.splitState = {
+            orientation,
+            replFraction: available > 0 ? replTarget / available : 0.5
+        };
+    }
+
+    handleWindowResize() {
+        if (this._resizeRaf) {
+            cancelAnimationFrame(this._resizeRaf);
+        }
+
+        this._resizeRaf = requestAnimationFrame(() => {
+            this._resizeRaf = null;
+            this.applySplitState();
+            // Monaco is configured with automaticLayout, but an explicit layout keeps it snappy.
+            if (this.editor) this.editor.layout();
+            if (this.replEditor) this.replEditor.layout();
+        });
     }
 
     initializeEditor() {
@@ -1407,6 +1504,9 @@ class DruidApp {
         });
 
         document.addEventListener('mouseup', () => {
+            if (isResizing) {
+                this.captureSplitState();
+            }
             isResizing = false;
         });
     }
@@ -1429,11 +1529,9 @@ class DruidApp {
             swapHorizontal.style.display = 'none';
             swapVertical.style.display = 'block';
             
-            // Set 50/50 split for vertical layout
-            const containerHeight = container.getBoundingClientRect().height;
-            const halfHeight = Math.floor(containerHeight / 2);
-            replPane.style.flex = `0 0 ${halfHeight}px`;
-            editorPane.style.flex = `0 0 ${halfHeight}px`;
+            // Set 50/50 split for vertical layout (and keep it responsive on resize)
+            this.splitState = { orientation: 'vertical', replFraction: 0.5 };
+            this.applySplitState();
         } else {
             container.classList.add('force-horizontal');
             container.classList.remove('force-vertical');
@@ -1444,9 +1542,9 @@ class DruidApp {
             swapHorizontal.style.display = 'block';
             swapVertical.style.display = 'none';
             
-            // Reset to default flex for horizontal layout
-            replPane.style.flex = '1';
-            editorPane.style.flex = '1';
+            // Reset to 50/50 split for horizontal layout (and keep it responsive on resize)
+            this.splitState = { orientation: 'horizontal', replFraction: 0.5 };
+            this.applySplitState();
         }
     }
 
@@ -1469,23 +1567,10 @@ class DruidApp {
             container.insertBefore(splitHandle, replPane);
         }
         
-        // Reset to 50/50 split after swapping
-        const isForcedVertical = container.classList.contains('force-vertical');
-        const isForcedHorizontal = container.classList.contains('force-horizontal');
-        const isResponsiveVertical = !isForcedHorizontal && window.innerWidth <= 768;
-        const isVertical = isForcedVertical || isResponsiveVertical;
-        
-        if (isVertical) {
-            const containerHeight = container.getBoundingClientRect().height;
-            const halfHeight = Math.floor(containerHeight / 2);
-            replPane.style.flex = `0 0 ${halfHeight}px`;
-            editorPane.style.flex = `0 0 ${halfHeight}px`;
-        } else {
-            const containerWidth = container.getBoundingClientRect().width;
-            const halfWidth = Math.floor(containerWidth / 2);
-            replPane.style.flex = `0 0 ${halfWidth}px`;
-            editorPane.style.flex = `0 0 ${halfWidth}px`;
-        }
+        // Reset to 50/50 split after swapping (and keep it responsive on resize)
+        const orientation = this.getCurrentSplitOrientation();
+        this.splitState = { orientation, replFraction: 0.5 };
+        this.applySplitState();
     }
 
     async handleReplInput(e) {
@@ -1943,27 +2028,10 @@ class DruidApp {
             this.elements.splitHandle.classList.remove('hidden');
             this.elements.replPane.classList.remove('full-width');
             
-            // Reset to 50/50 split when showing the editor
-            const container = this.elements.splitContainer;
-            const replPane = this.elements.replPane;
-            const editorPane = this.elements.editorPane;
-            
-            const isForcedVertical = container.classList.contains('force-vertical');
-            const isForcedHorizontal = container.classList.contains('force-horizontal');
-            const isResponsiveVertical = !isForcedHorizontal && window.innerWidth <= 768;
-            const isVertical = isForcedVertical || isResponsiveVertical;
-            
-            if (isVertical) {
-                const containerHeight = container.getBoundingClientRect().height;
-                const halfHeight = Math.floor(containerHeight / 2);
-                replPane.style.flex = `0 0 ${halfHeight}px`;
-                editorPane.style.flex = `0 0 ${halfHeight}px`;
-            } else {
-                const containerWidth = container.getBoundingClientRect().width;
-                const halfWidth = Math.floor(containerWidth / 2);
-                replPane.style.flex = `0 0 ${halfWidth}px`;
-                editorPane.style.flex = `0 0 ${halfWidth}px`;
-            }
+            // Reset to 50/50 split when showing the editor (and keep it responsive on resize)
+            const orientation = this.getCurrentSplitOrientation();
+            this.splitState = { orientation, replFraction: 0.5 };
+            this.applySplitState();
             
             // Re-layout Monaco editor
             if (this.editor) {
@@ -1979,6 +2047,9 @@ class DruidApp {
             // Clear inline flex styles to let CSS take over
             this.elements.replPane.style.flex = '';
             this.elements.editorPane.style.flex = '';
+
+            // Clear saved split state
+            this.splitState = null;
         }
     }
 
