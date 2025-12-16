@@ -16,7 +16,22 @@ A web-based editor and REPL for [monome crow](https://github.com/monome/crow) an
 - ❌ Firefox (not yet supported)
 - ❌ Safari (not yet supported)
 
-## Getting Started
+## Limitations
+
+Compared to the command-line version, druid web has some limitations:
+
+### Not Supported
+- **Firmware updates** - DFU mode requires native USB access
+- **WebSocket server** - The command-line druid can act as a WebSocket bridge
+- **Auto-discovery** - You must manually select the crow device each time
+
+### Browser Restrictions
+- Must grant permission for each session (security requirement)
+- HTTPS required for non-localhost deployments
+- Limited to Chromium-based browsers
+
+
+## Local Setup for Development
 
 ### Installation
 
@@ -46,20 +61,6 @@ npx http-server -p 8000
 ```
 
 Then open `http://localhost:8000` in your browser.
-
-## Limitations
-
-Compared to the command-line version, druid web has some limitations:
-
-### Not Supported
-- **Firmware updates** - DFU mode requires native USB access
-- **WebSocket server** - The command-line druid can act as a WebSocket bridge
-- **Auto-discovery** - You must manually select the crow device each time
-
-### Browser Restrictions
-- Must grant permission for each session (security requirement)
-- HTTPS required for non-localhost deployments
-- Limited to Chromium-based browsers
 
 ## Deployment
 
