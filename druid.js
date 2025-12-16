@@ -2247,15 +2247,37 @@ class DruidApp {
         }
 
         try {
-            const lines = code.split('\n');
+            const normalizedCode = String(code)
+                .replace(/\r\n/g, '\n')
+                .replace(/\r/g, '\n');
+
+            const preparedCode = this.prepareCodeForCrow(normalizedCode);
+
+            const lines = preparedCode.split('\n');
             for (const line of lines) {
                 await this.crow.writeLine(line);
                 await this.delay(1);
             }
-            this.outputLine(`>> ${code.replace(/\n/g, '\n>> ')}`);
+            this.outputLine(`>> ${preparedCode.replace(/\n/g, '\n>> ')}`);
         } catch (error) {
             this.outputLine(`Error: ${error.message}`);
         }
+    }
+
+    prepareCodeForCrow(code) {
+        const trimmed = code.trim();
+        const alreadyFenced = trimmed.startsWith('```') && trimmed.endsWith('```');
+        if (alreadyFenced) {
+            return code;
+        }
+
+        const isMultiline = code.includes('\n');
+        if (!isMultiline) {
+            return code;
+        }
+
+        const withoutTrailingNewlines = code.replace(/\n+$/g, '');
+        return `\`\`\`\n${withoutTrailingNewlines}\n\`\`\``;
     }
 
     async openBoweryBrowser() {
