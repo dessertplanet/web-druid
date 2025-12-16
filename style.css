@@ -408,6 +408,14 @@ body {
     transition: color 0.2s;
 }
 
+a.repl-connection-btn {
+    text-decoration: none;
+}
+
+.header-right .source-link {
+    margin-right: 3px;
+}
+
 .repl-connection-btn:hover {
     color: var(--interactive-selected);
 }
