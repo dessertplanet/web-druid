@@ -159,6 +159,7 @@ class DruidApp {
         this.replAutocompleteEnabled = true;
         this.splitState = null;
         this._resizeRaf = null;
+        this._suppressEditorChange = false;
         this.scriptName = 'untitled.lua';
         this.scriptModified = false;
         this.currentFile = null;
@@ -353,6 +354,11 @@ class DruidApp {
         window.addEventListener('resize', () => this.handleWindowResize());
     }
 
+    isEditorVisible() {
+        // Source of truth is the DOM (the toolbar and editor pane are shown/hidden together)
+        return !this.elements.editorPane.classList.contains('hidden');
+    }
+
     getCurrentSplitOrientation() {
         const container = this.elements.splitContainer;
         const isForcedVertical = container.classList.contains('force-vertical');
@@ -504,6 +510,10 @@ class DruidApp {
 
             // Track modifications
             this.editor.onDidChangeModelContent(() => {
+                if (this._suppressEditorChange) {
+                    this.validateLuaSyntax();
+                    return;
+                }
                 this.setModified(true);
                 this.validateLuaSyntax();
             });
@@ -2018,6 +2028,24 @@ class DruidApp {
         this.elements.scriptName.textContent = displayName;
     }
 
+    loadRemoteScriptIntoEditor(name, content) {
+        this.scriptName = name;
+        this.currentFile = null;
+        this.updateScriptName();
+
+        if (this.editor) {
+            this._suppressEditorChange = true;
+            try {
+                this.editor.setValue(content);
+            } finally {
+                this._suppressEditorChange = false;
+            }
+        }
+
+        this.setModified(false);
+        this.validateLuaSyntax();
+    }
+
     toggleEditor(show) {
         this.editorVisible = show;
         
@@ -2238,7 +2266,7 @@ class DruidApp {
         this.elements.bowerySearch.value = '';
         
         // Update action text based on editor visibility
-        if (this.editorVisible) {
+        if (this.isEditorVisible()) {
             this.elements.boweryAction.textContent = 'Select a script to load it into the editor';
         } else {
             this.elements.boweryAction.textContent = 'Select a script to upload it directly to crow';
@@ -2339,14 +2367,8 @@ class DruidApp {
             const content = await response.text();
             
             // If editor is visible, load into editor
-            if (this.editorVisible) {
-                this.scriptName = script.name;
-                this.currentFile = null;
-                if (this.editor) {
-                    this.editor.setValue(content);
-                }
-                this.setModified(false);
-                this.updateScriptName();
+            if (this.isEditorVisible()) {
+                this.loadRemoteScriptIntoEditor(script.name, content);
             } else {
                 // If editor is hidden, auto-upload to crow
                 if (!this.crow.isConnected) {
@@ -2380,7 +2402,7 @@ class DruidApp {
         this.elements.bbbowerySearch.value = '';
         
         // Update action text based on editor visibility
-        if (this.editorVisible) {
+        if (this.isEditorVisible()) {
             this.elements.bbboweryAction.textContent = '(bbbowery scripts require MTM Workshop Computer)';
         } else {
             this.elements.bbboweryAction.textContent = '(bbbowery scripts require MTM Workshop Computer)';
@@ -2480,14 +2502,8 @@ class DruidApp {
             const content = await response.text();
             
             // If editor is visible, load into editor
-            if (this.editorVisible) {
-                this.scriptName = script.name;
-                this.currentFile = null;
-                if (this.editor) {
-                    this.editor.setValue(content);
-                }
-                this.setModified(false);
-                this.updateScriptName();
+            if (this.isEditorVisible()) {
+                this.loadRemoteScriptIntoEditor(script.name, content);
             } else {
                 // If editor is hidden, auto-upload to blackbird
                 if (!this.crow.isConnected) {
