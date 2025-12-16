@@ -180,6 +180,85 @@ class DruidApp {
         this.setupSplitPane();
     }
 
+    getEditorContextKeyValue(editor, key) {
+        const contextKeyService = editor?._contextKeyService;
+        if (!contextKeyService || typeof contextKeyService.getContextKeyValue !== 'function') {
+            return false;
+        }
+        return !!contextKeyService.getContextKeyValue(key);
+    }
+
+    registerLuaLanguage() {
+        if (typeof monaco === 'undefined' || !monaco.languages) return;
+
+        // Monaco's AMD build used here doesn't ship Lua out of the box. We register a minimal
+        // Monarch tokenizer so Lua has syntax highlighting and basic language features.
+        try {
+            monaco.languages.register({ id: 'lua' });
+        } catch {
+            // It's fine if it's already registered.
+        }
+
+        const keywords = [
+            'and', 'break', 'do', 'else', 'elseif', 'end', 'false', 'for', 'function', 'goto',
+            'if', 'in', 'local', 'nil', 'not', 'or', 'repeat', 'return', 'then', 'true', 'until', 'while'
+        ];
+
+        monaco.languages.setMonarchTokensProvider('lua', {
+            defaultToken: '',
+            tokenPostfix: '.lua',
+            keywords,
+            tokenizer: {
+                root: [
+                    { include: '@whitespace' },
+
+                    [/--\[\[/, { token: 'comment', next: '@comment' }],
+                    [/--.*$/, 'comment'],
+
+                    [/\[\[/, { token: 'string', next: '@longstring' }],
+                    [/"/, { token: 'string.quote', next: '@string_dbl' }],
+                    [/'/, { token: 'string.quote', next: '@string_sgl' }],
+
+                    [/\d+(?:\.\d+)?(?:[eE][\-+]?\d+)?/, 'number'],
+
+                    [/[{}\[\]()]/, '@brackets'],
+                    [/[,.;:]/, 'delimiter'],
+                    [/[=<>~]=|\.{2,3}|[+\-*\/^%#=<>]/, 'operator'],
+
+                    [/[a-zA-Z_][\w_]*/, { cases: { '@keywords': 'keyword', '@default': 'identifier' } }]
+                ],
+
+                whitespace: [
+                    [/\s+/, 'white']
+                ],
+
+                comment: [
+                    [/[^\]]+/, 'comment'],
+                    [/\]\]/, { token: 'comment', next: '@pop' }],
+                    [/\]/, 'comment']
+                ],
+
+                longstring: [
+                    [/[^\]]+/, 'string'],
+                    [/\]\]/, { token: 'string', next: '@pop' }],
+                    [/\]/, 'string']
+                ],
+
+                string_dbl: [
+                    [/[^\\"]+/, 'string'],
+                    [/\\./, 'string.escape'],
+                    [/"/, { token: 'string.quote', next: '@pop' }]
+                ],
+
+                string_sgl: [
+                    [/[^\\']+/, 'string'],
+                    [/\\./, 'string.escape'],
+                    [/'/, { token: 'string.quote', next: '@pop' }]
+                ]
+            }
+        });
+    }
+
     initializeUI() {
         this.elements = {
             // Header
@@ -461,6 +540,8 @@ class DruidApp {
         require.config({ paths: { vs: 'node_modules/monaco-editor/min/vs' } });
         
         require(['vs/editor/editor.main'], () => {
+            this.registerLuaLanguage();
+
             // Configure Lua language settings
             monaco.languages.lua = monaco.languages.lua || {};
             
@@ -643,18 +724,17 @@ class DruidApp {
             }
 
             const keyCode = e.keyCode;
-            // Check if suggestion widget is visible by querying the DOM
-            const suggestWidget = document.querySelector('.editor-widget.suggest-widget.visible');
-            const isSuggestVisible = suggestWidget !== null;
-            
-            // Check if a suggestion is actually selected (has the focused class)
-            const isSuggestionSelected = isSuggestVisible && 
-                suggestWidget.querySelector('.monaco-list-row.focused') !== null;
+
+            // Prefer Monaco context keys over DOM class probing. This avoids accidental coupling
+            // to internal widget markup and works reliably with multiple editors on the page.
+            const isSuggestVisible = this.getEditorContextKeyValue(this.replEditor, 'suggestWidgetVisible');
+            const hasFocusedSuggestion = this.getEditorContextKeyValue(this.replEditor, 'suggestWidgetHasFocusedSuggestion');
             
             // Handle Enter key
             if (keyCode === monaco.KeyCode.Enter && !e.shiftKey) {
-                // If suggestion widget is visible AND a suggestion is selected, let Monaco handle it
-                if (isSuggestionSelected) {
+                // If suggest is visible and a suggestion is focused, let Monaco accept it.
+                // If suggest is visible but nothing is focused, treat Enter as "send".
+                if (isSuggestVisible && hasFocusedSuggestion) {
                     return;
                 }
                 // Otherwise, send the command
@@ -662,6 +742,9 @@ class DruidApp {
                 if (code) {
                     e.preventDefault();
                     e.stopPropagation();
+                    if (isSuggestVisible && !hasFocusedSuggestion) {
+                        this.replEditor.trigger('keyboard', 'hideSuggestWidget', null);
+                    }
                     this.sendReplCommand(code);
                 }
                 return;
