@@ -14,6 +14,10 @@ class CrowConnection {
         this.onDataReceived = null;
         this.onConnectionChange = null;
         this.lineBuffer = ''; // Buffer for incomplete lines
+
+        // Mirrors monome/druid's serial quirk workaround: when a write lands
+        // exactly on a 64-byte boundary, append an extra newline.
+        this._textEncoder = new TextEncoder();
     }
 
     async connect() {
@@ -113,7 +117,13 @@ class CrowConnection {
         }
         
         try {
-            await this.writer.write(data);
+            let payload = String(data);
+            const byteLen = this._textEncoder.encode(payload).length;
+            if (byteLen % 64 === 0) {
+                payload += '\n';
+            }
+
+            await this.writer.write(payload);
         } catch (error) {
             console.error('Write error:', error);
             throw error;
