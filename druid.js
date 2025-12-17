@@ -14,6 +14,10 @@ class CrowConnection {
         this.onDataReceived = null;
         this.onConnectionChange = null;
         this.lineBuffer = ''; // Buffer for incomplete lines
+
+        // Mirrors monome/druid's serial quirk workaround: when a write lands
+        // exactly on a 64-byte boundary, append an extra newline.
+        this._textEncoder = new TextEncoder();
     }
 
     async connect() {
@@ -113,7 +117,13 @@ class CrowConnection {
         }
         
         try {
-            await this.writer.write(data);
+            let payload = String(data);
+            const byteLen = this._textEncoder.encode(payload).length;
+            if (byteLen % 64 === 0) {
+                payload += '\n';
+            }
+
+            await this.writer.write(payload);
         } catch (error) {
             console.error('Write error:', error);
             throw error;
@@ -2631,6 +2641,33 @@ class DruidApp {
         ctx.stroke();
     }
 
+    getUploadLines(text) {
+        const normalized = String(text)
+            .replace(/\r\n/g, '\n')
+            .replace(/\r/g, '\n');
+
+        // Match monome/druid's behavior: each line is sent without trailing whitespace,
+        // and crow receives CRLF line endings via writeLine().
+        return normalized.split('\n').map((line) => line.replace(/\s+$/g, ''));
+    }
+
+    async sendScriptTextToCrow(text, endMarker) {
+        const lines = this.getUploadLines(text);
+
+        // Match monome/druid: send control markers without CRLF.
+        await this.crow.write('^^s');
+        await this.delay(200);
+
+        for (const line of lines) {
+            await this.crow.writeLine(line);
+            await this.delay(1);
+        }
+
+        // Match monome/druid: brief pause before the final marker.
+        await this.delay(100);
+        await this.crow.write(endMarker);
+    }
+
     async runScript() {
         if (!this.crow.isConnected || !this.editor) return;
         
@@ -2638,19 +2675,7 @@ class DruidApp {
         const code = this.editor.getValue();
         
         try {
-            await this.crow.writeLine('crow.reset()');
-            await this.delay(100);
-            await this.crow.writeLine('^^s'); // start script upload
-            await this.delay(200);
-            
-            const lines = code.split('\n');
-            for (const line of lines) {
-                await this.crow.writeLine(line);
-                await this.delay(1);
-            }
-            
-            await this.crow.writeLine('^^e'); // execute script
-            await this.delay(100);
+            await this.sendScriptTextToCrow(code, '^^e');
         } catch (error) {
             this.outputLine(`Run error: ${error.message}\n`);
         }
@@ -2663,17 +2688,7 @@ class DruidApp {
         const code = this.editor.getValue();
         
         try {
-            await this.crow.writeLine('^^s'); // start script upload
-            await this.delay(200);
-            
-            const lines = code.split('\n');
-            for (const line of lines) {
-                await this.crow.writeLine(line);
-                await this.delay(1);
-            }
-            
-            await this.crow.writeLine('^^w'); // write to flash
-            await this.delay(100);
+            await this.sendScriptTextToCrow(code, '^^w');
             this.setModified(false);
         } catch (error) {
             this.outputLine(`Upload error: ${error.message}\n`);
@@ -2945,18 +2960,8 @@ class DruidApp {
         try {
             const text = await file.text();
             this.outputLine(`Uploading ${file.name}...`);
-            
-            await this.crow.writeLine('^^s');
-            await this.delay(200);
-            
-            const lines = text.split('\\n');
-            for (const line of lines) {
-                await this.crow.writeLine(line);
-                await this.delay(1);
-            }
-            
-            await this.crow.writeLine('^^w');
-            await this.delay(100);
+
+            await this.sendScriptTextToCrow(text, '^^w');
         } catch (error) {
             this.outputLine(`Upload error: ${error.message}\\n`);
         }
@@ -3122,19 +3127,9 @@ class DruidApp {
                     this.outputLine('Error: Not connected to usb device (click connect in the header)');
                     return;
                 }
-                
+
                 this.outputLine(`Uploading ${script.name}...`);
-                await this.crow.writeLine('^^s');
-                await this.delay(200);
-                
-                const lines = content.split('\n');
-                for (const line of lines) {
-                    await this.crow.writeLine(line);
-                    await this.delay(1);
-                }
-                
-                await this.crow.writeLine('^^w');
-                await this.delay(100);
+                await this.sendScriptTextToCrow(content, '^^w');
             }
         } catch (error) {
             this.outputLine(`Error: ${error.message}`);
@@ -3257,19 +3252,9 @@ class DruidApp {
                     this.outputLine('Error: Not connected to usb device (click connect in the header)');
                     return;
                 }
-                
+
                 this.outputLine(`Uploading ${script.name}...`);
-                await this.crow.writeLine('^^s');
-                await this.delay(200);
-                
-                const lines = content.split('\n');
-                for (const line of lines) {
-                    await this.crow.writeLine(line);
-                    await this.delay(1);
-                }
-                
-                await this.crow.writeLine('^^w');
-                await this.delay(100);
+                await this.sendScriptTextToCrow(content, '^^w');
             }
         } catch (error) {
             this.outputLine(`Error: ${error.message}`);
