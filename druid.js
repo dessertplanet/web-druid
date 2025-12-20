@@ -3078,16 +3078,11 @@ class DruidApp {
             name.className = 'bowery-item-name';
             name.textContent = script.name;
             
-            const path = document.createElement('div');
-            path.className = 'bowery-item-path';
-            path.textContent = script.path;
-            
             const size = document.createElement('div');
             size.className = 'bowery-item-size';
             size.textContent = `${(script.size / 1024).toFixed(1)} KB`;
             
             item.appendChild(name);
-            item.appendChild(path);
             item.appendChild(size);
             
             item.addEventListener('click', () => this.loadBoweryScript(script));
@@ -3203,16 +3198,11 @@ class DruidApp {
             name.className = 'bowery-item-name';
             name.textContent = script.name;
             
-            const path = document.createElement('div');
-            path.className = 'bowery-item-path';
-            path.textContent = script.path;
-            
             const size = document.createElement('div');
             size.className = 'bowery-item-size';
             size.textContent = `${(script.size / 1024).toFixed(1)} KB`;
             
             item.appendChild(name);
-            item.appendChild(path);
             item.appendChild(size);
             
             item.addEventListener('click', () => this.loadBbboweryScript(script));
