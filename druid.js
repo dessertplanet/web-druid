@@ -3152,7 +3152,7 @@ class DruidApp {
         
         try {
             // Fetch the repo tree from GitHub API
-            const response = await fetch('https://api.github.com/repos/dessertplanet/Workshop_Computer/git/trees/main?recursive=1');
+            const response = await fetch('https://api.github.com/repos/TomWhitwell/Workshop_Computer/git/trees/main?recursive=1');
             
             if (!response.ok) {
                 throw new Error(`GitHub API error: ${response.status}`);
@@ -3164,14 +3164,14 @@ class DruidApp {
             this.bbboweryScripts = data.tree
                 .filter(item => 
                     item.type === 'blob' && 
-                    item.path.startsWith('releases/41_blackbird/examples/bbbowery/') &&
+                    item.path.startsWith('releases/41_blackbird/bbbowery/') &&
                     item.path.endsWith('.lua')
                 )
                 .map(item => ({
                     name: item.path.split('/').pop(),
                     path: `bbbowery/${item.path.split('/').pop()}`,
                     size: item.size,
-                    url: `https://raw.githubusercontent.com/dessertplanet/Workshop_Computer/main/${item.path}`
+                    url: `https://raw.githubusercontent.com/TomWhitwell/Workshop_Computer/main/${item.path}`
                 }))
                 .sort((a, b) => a.name.localeCompare(b.name));
             
