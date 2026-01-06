@@ -3649,9 +3649,9 @@ window.addEventListener('DOMContentLoaded', async () => {
         if (loaded) {
             console.log('✓ Base UF2 loaded successfully');
             console.log(`  Base UF2 size: ${uf2Generator.baseUf2.length} bytes`);
-            if (druid && druid.outputLine) {
-                druid.outputLine('UF2 generator ready (blackbird .uf2 saves enabled)');
-            }
+            // if (druid && druid.outputLine) {
+            //     druid.outputLine('UF2 generator ready (blackbird .uf2 saves enabled)');
+            // }
         } else {
             console.error('✗ Failed to load base UF2');
             if (druid && druid.outputLine) {
