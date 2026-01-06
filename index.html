@@ -42,7 +42,14 @@
                 <div class="toolbar-group">
                     <button id="newBtn" class="toolbar-btn">new</button>
                     <button id="openBtn" class="toolbar-btn">open</button>
-                    <button id="saveBtn" class="toolbar-btn">save</button>
+                    <div class="save-btn-container">
+                        <button id="saveBtn" class="toolbar-btn">save</button>
+                        <button id="saveDropdownBtn" class="toolbar-btn save-dropdown-btn" title="Save options">▼</button>
+                        <div id="saveDropdownMenu" class="save-dropdown-menu" style="display: none;">
+                            <button class="save-dropdown-item" data-format="lua">script</button>
+                            <button class="save-dropdown-item" data-format="uf2">blackbird uf2</button>
+                        </div>
+                    </div>
                     <button id="renameBtn" class="toolbar-btn">rename</button>
                 </div>
                 <div class="toolbar-group layout-toggle-group">
