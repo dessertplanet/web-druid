@@ -2779,7 +2779,7 @@ class DruidApp {
         }
         
         if (!uf2Generator.baseUf2) {
-            this.outputLine('Error: Base UF2 not loaded. Make sure blackbird.1.1.midi.uf2 is in the workspace.');
+            this.outputLine('Error: Base UF2 not loaded. Make sure UF2/blackbird.1.1.release.uf2 is in the workspace.');
             return;
         }
         
@@ -3645,7 +3645,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     console.log('Initializing UF2 generator...');
     
     try {
-        const loaded = await uf2Generator.loadBaseUf2('blackbird.1.1.midi.uf2');
+        const loaded = await uf2Generator.loadBaseUf2('UF2/blackbird.1.1.release.uf2');
         if (loaded) {
             console.log('✓ Base UF2 loaded successfully');
             console.log(`  Base UF2 size: ${uf2Generator.baseUf2.length} bytes`);
