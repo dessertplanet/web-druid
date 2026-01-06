@@ -3535,16 +3535,15 @@ class UF2Generator {
         
         console.log(`Created ${scriptBlocks512.length} script blocks`);
         
-        // OPTION 1: Script-only UF2 (no base firmware)
+        /* OPTION 1: Script-only UF2 (faster, but requires existing firmware)
         // This creates a minimal UF2 with ONLY the 64 script blocks
-        // Faster to flash and less likely to have timing issues
         console.log('Generating script-only UF2 (64 blocks, no base firmware)');
         const scriptOnlyUf2 = this.serializeAndRenumber(scriptBlocks512);
         console.log(`Script-only UF2 size: ${scriptOnlyUf2.length} bytes (${scriptOnlyUf2.length / 512} blocks)`);
-        
         return scriptOnlyUf2;
+        */
         
-        /* OPTION 2: Full firmware + script UF2 (commented out for now)
+        // OPTION 2: Full firmware + script UF2
         // Parse and filter base blocks to exclude user script region (including erase blocks)
         const baseBlocks512 = [];
         let filteredCount = 0;
@@ -3578,29 +3577,22 @@ class UF2Generator {
         console.log(`Base blocks: ${baseBlocks512.length}, Script blocks: ${scriptBlocks512.length}`);
         console.log(`Total blocks in output: ${baseBlocks512.length + scriptBlocks512.length}`);
         
-        // Combine base and script blocks
-        const allBlocks = [...baseBlocks512, ...scriptBlocks512];
+        // CRITICAL: Put script blocks FIRST so they get written before auto-reboot!
+        // The RP2040 bootloader processes blocks in file order and may reboot early
+        // if script blocks come last, they might not get written before reboot
+        const allBlocks = [...scriptBlocks512, ...baseBlocks512];
         
-        // CRITICAL: Sort by target address!
-        // The RP2040 bootloader may process blocks in address order, so we must ensure
-        // our script blocks (at 0x101FC000+) come AFTER any base blocks at lower addresses
-        allBlocks.sort((a, b) => {
-            const dvA = new DataView(a.buffer, a.byteOffset, a.byteLength);
-            const dvB = new DataView(b.buffer, b.byteOffset, b.byteLength);
-            const addrA = dvA.getUint32(12, true); // targetAddr at offset 12
-            const addrB = dvB.getUint32(12, true);
-            return addrA - addrB;
-        });
+        console.log('Script blocks placed FIRST in file to ensure they are written before auto-reboot');
         
-        // Show address range after sorting
+        // Show block order
         if (allBlocks.length > 0) {
             const getAddr = (block) => new DataView(block.buffer, block.byteOffset).getUint32(12, true);
-            const firstAddr = getAddr(allBlocks[0]);
-            const lastAddr = getAddr(allBlocks[allBlocks.length - 1]);
-            const scriptStartIdx = allBlocks.length - scriptBlocks512.length;
-            const firstScriptAddr = getAddr(allBlocks[scriptStartIdx]);
-            console.log(`Address range after sort: 0x${firstAddr.toString(16).toUpperCase()} to 0x${lastAddr.toString(16).toUpperCase()}`);
-            console.log(`First script block at index ${scriptStartIdx}, address 0x${firstScriptAddr.toString(16).toUpperCase()}`);
+            const firstBlockAddr = getAddr(allBlocks[0]);
+            const lastBlockAddr = getAddr(allBlocks[allBlocks.length - 1]);
+            const firstFirmwareAddr = getAddr(allBlocks[scriptBlocks512.length]);
+            console.log(`First block (script): 0x${firstBlockAddr.toString(16).toUpperCase()}`);
+            console.log(`First firmware block at index ${scriptBlocks512.length}: 0x${firstFirmwareAddr.toString(16).toUpperCase()}`);
+            console.log(`Last block: 0x${lastBlockAddr.toString(16).toUpperCase()}`);
         }
         
         const finalUf2 = this.serializeAndRenumber(allBlocks);
@@ -3608,7 +3600,6 @@ class UF2Generator {
         console.log(`Final UF2 size: ${finalUf2.length} bytes (${finalUf2.length / 512} blocks)`);
         
         return finalUf2;
-        */
     }
 
     validate(uf2Data) {
@@ -3645,7 +3636,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     console.log('Initializing UF2 generator...');
     
     try {
-        const loaded = await uf2Generator.loadBaseUf2('UF2/blackbird.1.1.release.uf2');
+        const loaded = await uf2Generator.loadBaseUf2('UF2/blackbird_platform.uf2');
         if (loaded) {
             console.log('✓ Base UF2 loaded successfully');
             console.log(`  Base UF2 size: ${uf2Generator.baseUf2.length} bytes`);
