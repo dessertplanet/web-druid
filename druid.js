@@ -422,6 +422,8 @@ class DruidApp {
             openBtn: document.getElementById('openBtn'),
             boweryBtn: document.getElementById('boweryBtn'),
             saveBtn: document.getElementById('saveBtn'),
+            saveDropdownBtn: document.getElementById('saveDropdownBtn'),
+            saveDropdownMenu: document.getElementById('saveDropdownMenu'),
             renameBtn: document.getElementById('renameBtn'),
             horizontalLayoutBtn: document.getElementById('horizontalLayoutBtn'),
             verticalLayoutBtn: document.getElementById('verticalLayoutBtn'),
@@ -525,6 +527,27 @@ class DruidApp {
         this.elements.boweryBtn.addEventListener('click', () => this.openBoweryBrowser());
         this.elements.bbboweryBtn.addEventListener('click', () => this.openBbboweryBrowser());
         this.elements.saveBtn.addEventListener('click', () => this.saveScript());
+        this.elements.saveDropdownBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.toggleSaveDropdown();
+        });
+        
+        // Save dropdown menu items
+        document.querySelectorAll('.save-dropdown-item').forEach(item => {
+            item.addEventListener('click', (e) => {
+                const format = e.target.dataset.format;
+                this.saveScript(format);
+                this.hideSaveDropdown();
+            });
+        });
+        
+        // Close dropdown when clicking outside
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.save-btn-container')) {
+                this.hideSaveDropdown();
+            }
+        });
+        
         this.elements.renameBtn.addEventListener('click', () => this.renameScript());
         
         // Layout toggle buttons
@@ -2727,19 +2750,80 @@ class DruidApp {
         this.elements.fileInput.value = '';
     }
 
-    saveScript() {
+    saveScript(format = 'lua') {
         if (!this.editor) return;
         
         const content = this.editor.getValue();
-        const blob = new Blob([content], { type: 'text/plain' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = this.scriptName;
-        a.click();
-        URL.revokeObjectURL(url);
         
-        this.setModified(false);
+        if (format === 'uf2') {
+            // Generate and download UF2
+            this.saveAsUf2(content);
+        } else {
+            // Save as Lua (default)
+            const blob = new Blob([content], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = this.scriptName;
+            a.click();
+            URL.revokeObjectURL(url);
+            
+            this.setModified(false);
+        }
+    }
+
+    saveAsUf2(scriptContent) {
+        if (typeof uf2Generator === 'undefined' || !uf2Generator) {
+            this.outputLine('Error: UF2 generator not initialized');
+            return;
+        }
+        
+        if (!uf2Generator.baseUf2) {
+            this.outputLine('Error: Base UF2 not loaded. Make sure blackbird.1.1.midi.uf2 is in the workspace.');
+            return;
+        }
+        
+        try {
+            this.outputLine('Generating Blackbird UF2...');
+            
+            const uf2Data = uf2Generator.injectScriptIntoBaseUf2(scriptContent);
+            
+            // Validate the generated UF2
+            const validation = uf2Generator.validate(uf2Data);
+            if (!validation.valid) {
+                throw new Error(`UF2 validation failed: ${validation.error}`);
+            }
+            
+            this.outputLine(`Generated UF2: ${validation.blocks} blocks (${validation.userBlocks} user script blocks)`);
+            
+            // Download the UF2
+            const blob = new Blob([uf2Data], { type: 'application/octet-stream' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            
+            // Change extension to .uf2
+            const uf2Name = this.scriptName.replace(/\.lua$/, '') + '.uf2';
+            a.download = uf2Name;
+            a.click();
+            URL.revokeObjectURL(url);
+            
+            this.outputLine(`Saved as ${uf2Name}`);
+            this.setModified(false);
+        } catch (error) {
+            this.outputLine(`Error generating UF2: ${error.message}`);
+            console.error('UF2 generation error:', error);
+        }
+    }
+
+    toggleSaveDropdown() {
+        const menu = this.elements.saveDropdownMenu;
+        const isVisible = menu.style.display === 'block';
+        menu.style.display = isVisible ? 'none' : 'block';
+    }
+
+    hideSaveDropdown() {
+        this.elements.saveDropdownMenu.style.display = 'none';
     }
 
     renameScript() {
@@ -3256,8 +3340,328 @@ class DruidApp {
     }
 }
 
+// ============================================================
+// UF2 Script Injection for Blackbird
+// ============================================================
+
+class UF2Generator {
+    constructor() {
+        // UF2 constants
+        this.UF2_MAGIC_START0 = 0x0A324655;
+        this.UF2_MAGIC_START1 = 0x9E5D5157;
+        this.UF2_MAGIC_END = 0x0AB16F30;
+        this.RP2040_FAMILY_ID = 0xE48BFF56;
+        
+        // Blackbird flash layout
+        this.USER_FLASH_START = 0x101FC000;
+        this.USER_FLASH_SIZE = 16 * 1024;
+        this.USER_BLOCK_SIZE = 256;
+        this.MAX_SCRIPT_LEN = this.USER_FLASH_SIZE - 4 - 32; // 16348 bytes
+        
+        this.baseUf2 = null;
+    }
+
+    async loadBaseUf2(url) {
+        try {
+            console.log(`Attempting to load UF2 from: ${url}`);
+            const response = await fetch(url);
+            console.log(`Fetch response status: ${response.status}`);
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
+            const arrayBuffer = await response.arrayBuffer();
+            console.log(`Loaded ${arrayBuffer.byteLength} bytes`);
+            
+            this.baseUf2 = new Uint8Array(arrayBuffer);
+            console.log(`Base UF2 stored: ${this.baseUf2.length} bytes`);
+            
+            return true;
+        } catch (error) {
+            console.error('Error loading base UF2:', error);
+            console.error('Error details:', error.message);
+            return false;
+        }
+    }
+
+    parseUf2(fileBytes) {
+        if (fileBytes.length % 512 !== 0) {
+            throw new Error('UF2 length must be a multiple of 512');
+        }
+        
+        const blocks = [];
+        for (let off = 0; off < fileBytes.length; off += 512) {
+            const dv = new DataView(fileBytes.buffer, fileBytes.byteOffset + off, 512);
+            
+            const magic0 = dv.getUint32(0, true);
+            const magic1 = dv.getUint32(4, true);
+            const magicEnd = dv.getUint32(512 - 4, true);
+            
+            if (magic0 !== this.UF2_MAGIC_START0 || magic1 !== this.UF2_MAGIC_START1 || magicEnd !== this.UF2_MAGIC_END) {
+                throw new Error(`Bad UF2 magic at block offset ${off}`);
+            }
+            
+            blocks.push({
+                offset: off,
+                targetAddr: dv.getUint32(12, true),
+                payloadSize: dv.getUint32(16, true),
+                blockNo: dv.getUint32(20, true),
+                numBlocks: dv.getUint32(24, true),
+                data: fileBytes.slice(off, off + 512)
+            });
+        }
+        
+        return blocks;
+    }
+
+    deriveScriptName(scriptText) {
+        const firstLine = scriptText.split(/\r?\n/, 1)[0] || '';
+        if (!firstLine.startsWith('---')) return '';
+        return firstLine.slice(3).trim().substring(0, 31);
+    }
+
+    buildUserFlashImage(scriptUtf8, name, versionWord = 0x040) {
+        if (scriptUtf8.length > this.MAX_SCRIPT_LEN) {
+            throw new Error(`Script too large: ${scriptUtf8.length} > ${this.MAX_SCRIPT_LEN}`);
+        }
+        
+        const image = new Uint8Array(this.USER_FLASH_SIZE);
+        image.fill(0xFF);
+        
+        // Build status word: [magic:4][version:12][length:16]
+        const statusWord = 0x0A | ((versionWord & 0x0FFF) << 4) | ((scriptUtf8.length & 0xFFFF) << 16);
+        
+        console.log(`Status word: 0x${statusWord.toString(16).padStart(8, '0').toUpperCase()}`);
+        console.log(`  Magic: 0x${(statusWord & 0xF).toString(16).toUpperCase()} (should be 0xA)`);
+        console.log(`  Version: 0x${((statusWord >> 4) & 0xFFF).toString(16).toUpperCase()}`);
+        console.log(`  Length: ${(statusWord >> 16) & 0xFFFF} bytes`);
+        
+        const dv = new DataView(image.buffer);
+        dv.setUint32(0, statusWord >>> 0, true);
+        
+        // Script name: 32 bytes, NUL-terminated
+        const nameBytes = new TextEncoder().encode(name);
+        const n = Math.min(nameBytes.length, 31);
+        image.set(nameBytes.slice(0, n), 4);
+        image[4 + n] = 0x00;
+        
+        console.log(`Script name bytes: [${n} chars] "${name}"`);
+        
+        // Script bytes at offset 4+32
+        image.set(scriptUtf8, 4 + 32);
+        
+        // Verify first few bytes of the flash image
+        console.log(`Flash image first 36 bytes (hex):`);
+        console.log(`  Status: ${Array.from(image.slice(0, 4)).map(b => b.toString(16).padStart(2, '0')).join(' ')}`);
+        console.log(`  Name:   ${Array.from(image.slice(4, 36)).map(b => b.toString(16).padStart(2, '0')).join(' ')}`);
+        
+        return image;
+    }
+
+    createUf2Block(targetAddr, payload) {
+        if (payload.length !== 256) {
+            throw new Error('Payload must be 256 bytes');
+        }
+        
+        const block = new Uint8Array(512);
+        const dv = new DataView(block.buffer);
+        
+        dv.setUint32(0, this.UF2_MAGIC_START0, true);
+        dv.setUint32(4, this.UF2_MAGIC_START1, true);
+        dv.setUint32(8, 0x2000, true); // familyID present flag
+        dv.setUint32(12, targetAddr >>> 0, true);
+        dv.setUint32(16, 256, true);
+        // blockNo and numBlocks filled later
+        dv.setUint32(28, this.RP2040_FAMILY_ID, true);
+        
+        block.set(payload, 32);
+        
+        dv.setUint32(512 - 4, this.UF2_MAGIC_END, true);
+        
+        return block;
+    }
+
+    makeUserScriptUf2Blocks(userFlashImage16k) {
+        if (userFlashImage16k.length !== this.USER_FLASH_SIZE) {
+            throw new Error('Expected 16KB image');
+        }
+        
+        const blocks = [];
+        for (let i = 0; i < this.USER_FLASH_SIZE / this.USER_BLOCK_SIZE; i++) {
+            const payload = userFlashImage16k.slice(i * 256, i * 256 + 256);
+            blocks.push(this.createUf2Block(this.USER_FLASH_START + i * 256, payload));
+        }
+        
+        return blocks;
+    }
+
+    inUserRange(addr) {
+        return addr >= 0x101FC000 && addr <= 0x101FFFFF;
+    }
+
+    filterOutUserRegion(blocks) {
+        return blocks.filter(b => !this.inUserRange(b.targetAddr));
+    }
+
+    serializeAndRenumber(allBlocks512) {
+        const total = allBlocks512.length;
+        const out = new Uint8Array(total * 512);
+        
+        for (let i = 0; i < total; i++) {
+            const block = new Uint8Array(allBlocks512[i]);
+            const dv = new DataView(block.buffer, block.byteOffset, block.byteLength);
+            dv.setUint32(20, i, true);      // blockNo
+            dv.setUint32(24, total, true);  // numBlocks
+            out.set(block, i * 512);
+        }
+        
+        return out;
+    }
+
+    injectScriptIntoBaseUf2(scriptText) {
+        if (!this.baseUf2) {
+            throw new Error('Base UF2 not loaded');
+        }
+        
+        const scriptUtf8 = new TextEncoder().encode(scriptText);
+        const name = this.deriveScriptName(scriptText);
+        
+        console.log(`Script length: ${scriptUtf8.length} bytes`);
+        console.log(`Script name: "${name}"`);
+        
+        const image16k = this.buildUserFlashImage(scriptUtf8, name);
+        const scriptBlocks512 = this.makeUserScriptUf2Blocks(image16k);
+        
+        console.log(`Created ${scriptBlocks512.length} script blocks`);
+        
+        // OPTION 1: Script-only UF2 (no base firmware)
+        // This creates a minimal UF2 with ONLY the 64 script blocks
+        // Faster to flash and less likely to have timing issues
+        console.log('Generating script-only UF2 (64 blocks, no base firmware)');
+        const scriptOnlyUf2 = this.serializeAndRenumber(scriptBlocks512);
+        console.log(`Script-only UF2 size: ${scriptOnlyUf2.length} bytes (${scriptOnlyUf2.length / 512} blocks)`);
+        
+        return scriptOnlyUf2;
+        
+        /* OPTION 2: Full firmware + script UF2 (commented out for now)
+        // Parse and filter base blocks to exclude user script region (including erase blocks)
+        const baseBlocks512 = [];
+        let filteredCount = 0;
+        let userRegionAddresses = new Set();
+        
+        for (let i = 0; i < this.baseUf2.length; i += 512) {
+            const chunk = this.baseUf2.slice(i, i + 512);
+            const dv = new DataView(chunk.buffer, chunk.byteOffset, chunk.byteLength);
+            
+            // Verify this is a valid UF2 block
+            const magic0 = dv.getUint32(0, true);
+            const magic1 = dv.getUint32(4, true);
+            if (magic0 !== this.UF2_MAGIC_START0 || magic1 !== this.UF2_MAGIC_START1) {
+                console.warn(`Skipping invalid block at offset ${i}`);
+                continue;
+            }
+            
+            const targetAddr = dv.getUint32(12, true);
+            
+            if (this.inUserRange(targetAddr)) {
+                filteredCount++;
+                userRegionAddresses.add(targetAddr);
+                console.log(`Filtering block ${Math.floor(i/512)} targeting 0x${targetAddr.toString(16).toUpperCase()}`);
+            } else {
+                baseBlocks512.push(chunk);
+            }
+        }
+        
+        console.log(`Filtered out ${filteredCount} blocks from user script region`);
+        console.log(`User region addresses found in base UF2:`, Array.from(userRegionAddresses).map(a => `0x${a.toString(16).toUpperCase()}`).slice(0, 10));
+        console.log(`Base blocks: ${baseBlocks512.length}, Script blocks: ${scriptBlocks512.length}`);
+        console.log(`Total blocks in output: ${baseBlocks512.length + scriptBlocks512.length}`);
+        
+        // Combine base and script blocks
+        const allBlocks = [...baseBlocks512, ...scriptBlocks512];
+        
+        // CRITICAL: Sort by target address!
+        // The RP2040 bootloader may process blocks in address order, so we must ensure
+        // our script blocks (at 0x101FC000+) come AFTER any base blocks at lower addresses
+        allBlocks.sort((a, b) => {
+            const dvA = new DataView(a.buffer, a.byteOffset, a.byteLength);
+            const dvB = new DataView(b.buffer, b.byteOffset, b.byteLength);
+            const addrA = dvA.getUint32(12, true); // targetAddr at offset 12
+            const addrB = dvB.getUint32(12, true);
+            return addrA - addrB;
+        });
+        
+        // Show address range after sorting
+        if (allBlocks.length > 0) {
+            const getAddr = (block) => new DataView(block.buffer, block.byteOffset).getUint32(12, true);
+            const firstAddr = getAddr(allBlocks[0]);
+            const lastAddr = getAddr(allBlocks[allBlocks.length - 1]);
+            const scriptStartIdx = allBlocks.length - scriptBlocks512.length;
+            const firstScriptAddr = getAddr(allBlocks[scriptStartIdx]);
+            console.log(`Address range after sort: 0x${firstAddr.toString(16).toUpperCase()} to 0x${lastAddr.toString(16).toUpperCase()}`);
+            console.log(`First script block at index ${scriptStartIdx}, address 0x${firstScriptAddr.toString(16).toUpperCase()}`);
+        }
+        
+        const finalUf2 = this.serializeAndRenumber(allBlocks);
+        
+        console.log(`Final UF2 size: ${finalUf2.length} bytes (${finalUf2.length / 512} blocks)`);
+        
+        return finalUf2;
+        */
+    }
+
+    validate(uf2Data) {
+        // Basic validation
+        if (uf2Data.length % 512 !== 0) {
+            return { valid: false, error: 'File length not a multiple of 512' };
+        }
+        
+        const blocks = this.parseUf2(uf2Data);
+        
+        // Count user script blocks
+        const userScriptBlocks = blocks.filter(b => this.inUserRange(b.targetAddr));
+        const expectedUserBlocks = this.USER_FLASH_SIZE / this.USER_BLOCK_SIZE;
+        
+        if (userScriptBlocks.length !== expectedUserBlocks) {
+            return { 
+                valid: false, 
+                error: `Expected ${expectedUserBlocks} user script blocks, found ${userScriptBlocks.length}` 
+            };
+        }
+        
+        return { valid: true, blocks: blocks.length, userBlocks: userScriptBlocks.length };
+    }
+}
+
 // Initialize app when page loads
 let druid;
-window.addEventListener('DOMContentLoaded', () => {
+let uf2Generator;
+window.addEventListener('DOMContentLoaded', async () => {
     druid = new DruidApp();
+    
+    // Initialize UF2 generator and load base file
+    uf2Generator = new UF2Generator();
+    console.log('Initializing UF2 generator...');
+    
+    try {
+        const loaded = await uf2Generator.loadBaseUf2('blackbird.1.1.midi.uf2');
+        if (loaded) {
+            console.log('✓ Base UF2 loaded successfully');
+            console.log(`  Base UF2 size: ${uf2Generator.baseUf2.length} bytes`);
+            if (druid && druid.outputLine) {
+                druid.outputLine('UF2 generator ready (blackbird .uf2 saves enabled)');
+            }
+        } else {
+            console.error('✗ Failed to load base UF2');
+            if (druid && druid.outputLine) {
+                druid.outputLine('Warning: UF2 generator failed to load base file');
+            }
+        }
+    } catch (error) {
+        console.error('✗ Error initializing UF2 generator:', error);
+        if (druid && druid.outputLine) {
+            druid.outputLine(`Error: Failed to initialize UF2 generator - ${error.message}`);
+        }
+    }
 });
